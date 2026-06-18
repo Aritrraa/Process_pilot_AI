@@ -29,3 +29,7 @@ frontend/dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# PDF documents
+*.pdf
+
