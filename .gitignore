@@ -1,0 +1,31 @@
+# Python virtual environments and caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Local databases and runtime file stores
+backend/processpilot.db
+backend/chroma_db/
+backend/uploads/
+*.db
+*.sqlite
+*.lock
+knowledge_graph.json.lock
+
+# Frontend package artifacts
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+*.log
+
+# IDE and OS configurations
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

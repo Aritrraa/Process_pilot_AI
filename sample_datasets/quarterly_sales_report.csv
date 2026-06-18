@@ -1,0 +1,9 @@
+Product_ID,Product_Name,Category,Q1_Units_Sold,Q2_Units_Sold,Unit_Price,Total_Revenue,Region
+PROD-101,ProcessPilot Basic,Software,250,380,49.00,30870.00,North America
+PROD-102,ProcessPilot Professional,Software,140,210,129.00,45150.00,Global
+PROD-103,ProcessPilot Enterprise,Software,45,72,499.00,58383.00,Global
+PROD-104,Custom Deployment Consultation,Services,12,18,1500.00,45000.00,North America
+PROD-105,Premium Support Plan,Services,85,112,99.00,19503.00,Europe
+PROD-106,Training Workshops,Services,8,15,750.00,17250.00,North America
+PROD-107,API Extra Call Pack,Addon,310,480,19.00,15010.00,Global
+PROD-108,Custom Connectors License,Addon,19,28,299.00,14053.00,Europe

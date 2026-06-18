@@ -1,0 +1,11 @@
+Employee_ID,Name,Department,Role,Email,Hire_Date,Status
+EMP-001,John Doe,Engineering,Senior Software Engineer,john@processpilot.ai,2023-01-15,Active
+EMP-002,Sarah Jenkins,HR,HR Director,sarah@processpilot.ai,2022-06-10,Active
+EMP-003,Rohan Mehta,Engineering,Frontend Developer,rohan@processpilot.ai,2024-03-01,Active
+EMP-004,Mark Somerhalder,Finance,Finance Manager,mark@processpilot.ai,2021-11-20,Active
+EMP-005,Alice Vance,Operations,Operations Specialist,alice@processpilot.ai,2023-08-14,Active
+EMP-006,David Kim,Engineering,DevOps Lead,david.k@processpilot.ai,2023-05-10,Active
+EMP-007,Emma Watson,HR,Onboarding Coordinator,emma.w@processpilot.ai,2024-01-10,Active
+EMP-008,James Rodriguez,Finance,Senior Accountant,james.r@processpilot.ai,2022-09-05,Active
+EMP-009,Elena Rostova,Operations,Support Lead,elena.r@processpilot.ai,2023-02-28,Active
+EMP-010,Carlos Santana,Engineering,QA Engineer,carlos.s@processpilot.ai,2024-05-15,Active

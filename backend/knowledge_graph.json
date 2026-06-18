@@ -1,0 +1,406 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "name": "Engineering",
+      "type": "Department",
+      "id": "dept_Engineering"
+    },
+    {
+      "name": "HR",
+      "type": "Department",
+      "id": "dept_HR"
+    },
+    {
+      "name": "Operations",
+      "type": "Department",
+      "id": "dept_Operations"
+    },
+    {
+      "name": "Finance",
+      "type": "Department",
+      "id": "dept_Finance"
+    },
+    {
+      "email": "admin@processpilot.ai",
+      "name": "Admin Principal",
+      "role": "Admin",
+      "type": "User",
+      "id": "user_admin@processpilot.ai"
+    },
+    {
+      "email": "sarah@processpilot.ai",
+      "name": "Sarah Jenkins",
+      "role": "Manager",
+      "type": "User",
+      "id": "user_sarah@processpilot.ai"
+    },
+    {
+      "email": "mark@processpilot.ai",
+      "name": "Mark Somerhalder",
+      "role": "Manager",
+      "type": "User",
+      "id": "user_mark@processpilot.ai"
+    },
+    {
+      "email": "john@processpilot.ai",
+      "name": "John Doe",
+      "role": "Employee",
+      "type": "User",
+      "id": "user_john@processpilot.ai"
+    },
+    {
+      "email": "rohan@processpilot.ai",
+      "name": "Rohan Mehta",
+      "role": "Employee",
+      "type": "User",
+      "id": "user_rohan@processpilot.ai"
+    },
+    {
+      "email": "alice@processpilot.ai",
+      "name": "Alice Vance",
+      "role": "Employee",
+      "type": "User",
+      "id": "user_alice@processpilot.ai"
+    },
+    {
+      "email": "emma@processpilot.ai",
+      "name": "Emma Watson",
+      "role": "Employee",
+      "type": "User",
+      "id": "user_emma@processpilot.ai"
+    },
+    {
+      "email": "elena@processpilot.ai",
+      "name": "Elena Rostova",
+      "role": "Employee",
+      "type": "User",
+      "id": "user_elena@processpilot.ai"
+    },
+    {
+      "email": "aritradas405@gmail.com",
+      "name": "Ari",
+      "role": "Employee",
+      "type": "User",
+      "id": "user_aritradas405@gmail.com"
+    },
+    {
+      "title": "deployment_guide.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_1"
+    },
+    {
+      "name": "deployment",
+      "type": "Technology",
+      "id": "tech_deployment"
+    },
+    {
+      "title": "incident_response_sop.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_2"
+    },
+    {
+      "title": "code_review_standards.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_3"
+    },
+    {
+      "title": "security_policy.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_4"
+    },
+    {
+      "name": "security",
+      "type": "Technology",
+      "id": "tech_security"
+    },
+    {
+      "title": "onboarding_checklist.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_5"
+    },
+    {
+      "title": "leave_policy.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_6"
+    },
+    {
+      "title": "performance_review_sop.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_7"
+    },
+    {
+      "title": "employee_benefits_guide.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_8"
+    },
+    {
+      "title": "remote_work_policy.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_9"
+    },
+    {
+      "title": "disaster_recovery_plan.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_10"
+    },
+    {
+      "title": "vendor_management_sop.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_11"
+    },
+    {
+      "title": "it_asset_management_sop.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_12"
+    },
+    {
+      "title": "budget_planning_guide.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_13"
+    },
+    {
+      "title": "data_privacy_policy.txt",
+      "file_type": "txt",
+      "type": "Document",
+      "id": "doc_14"
+    }
+  ],
+  "links": [
+    {
+      "relationship": "member_of",
+      "source": "user_admin@processpilot.ai",
+      "target": "dept_Engineering"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_admin@processpilot.ai",
+      "target": "doc_13"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_admin@processpilot.ai",
+      "target": "doc_14"
+    },
+    {
+      "relationship": "member_of",
+      "source": "user_sarah@processpilot.ai",
+      "target": "dept_Engineering"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_sarah@processpilot.ai",
+      "target": "doc_1"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_sarah@processpilot.ai",
+      "target": "doc_2"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_sarah@processpilot.ai",
+      "target": "doc_3"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_sarah@processpilot.ai",
+      "target": "doc_4"
+    },
+    {
+      "relationship": "member_of",
+      "source": "user_mark@processpilot.ai",
+      "target": "dept_HR"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_mark@processpilot.ai",
+      "target": "doc_5"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_mark@processpilot.ai",
+      "target": "doc_6"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_mark@processpilot.ai",
+      "target": "doc_7"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_mark@processpilot.ai",
+      "target": "doc_8"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_mark@processpilot.ai",
+      "target": "doc_9"
+    },
+    {
+      "relationship": "member_of",
+      "source": "user_john@processpilot.ai",
+      "target": "dept_Engineering"
+    },
+    {
+      "relationship": "reports_to",
+      "source": "user_john@processpilot.ai",
+      "target": "user_sarah@processpilot.ai"
+    },
+    {
+      "relationship": "member_of",
+      "source": "user_rohan@processpilot.ai",
+      "target": "dept_Engineering"
+    },
+    {
+      "relationship": "reports_to",
+      "source": "user_rohan@processpilot.ai",
+      "target": "user_sarah@processpilot.ai"
+    },
+    {
+      "relationship": "member_of",
+      "source": "user_alice@processpilot.ai",
+      "target": "dept_Operations"
+    },
+    {
+      "relationship": "reports_to",
+      "source": "user_alice@processpilot.ai",
+      "target": "user_mark@processpilot.ai"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_alice@processpilot.ai",
+      "target": "doc_10"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_alice@processpilot.ai",
+      "target": "doc_11"
+    },
+    {
+      "relationship": "uploaded",
+      "source": "user_alice@processpilot.ai",
+      "target": "doc_12"
+    },
+    {
+      "relationship": "member_of",
+      "source": "user_emma@processpilot.ai",
+      "target": "dept_HR"
+    },
+    {
+      "relationship": "reports_to",
+      "source": "user_emma@processpilot.ai",
+      "target": "user_mark@processpilot.ai"
+    },
+    {
+      "relationship": "member_of",
+      "source": "user_elena@processpilot.ai",
+      "target": "dept_Operations"
+    },
+    {
+      "relationship": "reports_to",
+      "source": "user_elena@processpilot.ai",
+      "target": "user_mark@processpilot.ai"
+    },
+    {
+      "relationship": "reports_to",
+      "source": "user_aritradas405@gmail.com",
+      "target": "user_sarah@processpilot.ai"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_1",
+      "target": "dept_Engineering"
+    },
+    {
+      "relationship": "covers",
+      "source": "doc_1",
+      "target": "tech_deployment"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_2",
+      "target": "dept_Engineering"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_3",
+      "target": "dept_Engineering"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_4",
+      "target": "dept_Engineering"
+    },
+    {
+      "relationship": "covers",
+      "source": "doc_4",
+      "target": "tech_security"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_5",
+      "target": "dept_HR"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_6",
+      "target": "dept_HR"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_7",
+      "target": "dept_HR"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_8",
+      "target": "dept_HR"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_9",
+      "target": "dept_HR"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_10",
+      "target": "dept_Operations"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_11",
+      "target": "dept_Operations"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_12",
+      "target": "dept_Operations"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_13",
+      "target": "dept_Finance"
+    },
+    {
+      "relationship": "belongs_to",
+      "source": "doc_14",
+      "target": "dept_Finance"
+    }
+  ]
+}

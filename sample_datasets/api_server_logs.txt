@@ -1,0 +1,29 @@
+ProcessPilot API Diagnostics Log — June 15, 2026
+=================================================
+System Version: v1.0.0-prod | Environment: Production
+
+[2026-06-15 08:30:12] [INFO] [main] Starting database connection pool for sqlite:///processpilot.db
+[2026-06-15 08:30:13] [INFO] [main] Database pool connected. Max connections: 20, Timeout: 30s
+[2026-06-15 08:30:14] [INFO] [main] Initializing ChromaDB vector store collection 'processpilot_docs'
+[2026-06-15 08:30:15] [INFO] [main] ChromaDB vector store initialized successfully. Current collection count: 42
+[2026-06-15 08:31:05] [INFO] [auth] POST /api/v1/auth/login - Request from IP 192.168.1.45 - Status 200 OK
+[2026-06-15 08:31:40] [INFO] [documents] POST /api/v1/documents/upload - Request from user admin@processpilot.ai (Admin)
+[2026-06-15 08:31:42] [INFO] [documents] Document 'incident_response_sop.txt' processed and split into 3 chunks.
+[2026-06-15 08:31:43] [INFO] [vectorstore] Uploaded 3 embeddings to ChromaDB for doc: incident_response_sop.txt
+[2026-06-15 08:31:43] [INFO] [documents] POST /api/v1/documents/upload - Status 201 Created
+[2026-06-15 08:32:15] [INFO] [chat] POST /api/v1/chat/query - Request from user john@processpilot.ai (Employee)
+[2026-06-15 08:32:15] [DEBUG] [chat] Query: "Who is the on-call contact for DevOps?"
+[2026-06-15 08:32:16] [INFO] [vectorstore] Querying ChromaDB with prompt: "Who is the on-call contact for DevOps?"
+[2026-06-15 08:32:16] [INFO] [vectorstore] ChromaDB returned 2 relevant chunks. Best score: 0.8842
+[2026-06-15 08:32:16] [INFO] [agents] Delegating query to DevOps Agent pipeline. Selected LLM Provider: Groq (llama-3.1-70b-versatile)
+[2026-06-15 08:32:18] [INFO] [agents] DevOps Agent completed reasoning and returned response. Tokens: Prompt=1250, Completion=245
+[2026-06-15 08:32:18] [INFO] [chat] POST /api/v1/chat/query - Status 200 OK
+[2026-06-15 08:35:01] [WARNING] [database] Connection pool utilization at 85%. Active: 17, Idle: 3
+[2026-06-15 08:35:40] [ERROR] [chat] LLM Provider Groq failed with status 429 Too Many Requests (Rate Limit Exceeded)
+[2026-06-15 08:35:40] [WARNING] [agents] Groq failed. Falling back to Gemini (gemini-1.5-flash) as secondary provider.
+[2026-06-15 08:35:42] [INFO] [agents] Gemini fallback completed successfully. Returned response.
+[2026-06-15 08:35:42] [INFO] [chat] POST /api/v1/chat/query - Status 200 OK
+[2026-06-15 08:40:00] [INFO] [analytics] GET /api/v1/analytics/overview - Status 200 OK
+[2026-06-15 08:45:12] [INFO] [tasks] PATCH /api/v1/tasks/12 - Status 200 OK - Task updated to Completed by sarah@processpilot.ai
+=================================================
+End of Diagnostics log
