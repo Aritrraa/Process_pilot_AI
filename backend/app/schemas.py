@@ -130,6 +130,7 @@ class TaskResponse(BaseModel):
     status: str
     assigned_to: Optional[int] = None
     assignee_name: Optional[str] = None
+    manager_id: Optional[int] = None
     document_id: Optional[int] = None
     meeting_id: Optional[int] = None
     created_at: datetime

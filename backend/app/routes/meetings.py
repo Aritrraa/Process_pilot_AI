@@ -197,13 +197,15 @@ def create_meeting(
     db.refresh(meeting)
 
     # Create extracted tasks
+    task_manager_id = current_user.manager_id if current_user.role == "Employee" else current_user.id
     for title, desc in tasks_to_create:
         new_task = Task(
             title=title,
             description=desc,
             status="Pending",
             meeting_id=meeting.id,
-            assigned_to=current_user.id
+            assigned_to=current_user.id,
+            manager_id=task_manager_id
         )
         db.add(new_task)
     db.commit()

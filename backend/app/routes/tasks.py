@@ -36,10 +36,12 @@ def create_task(
                 detail="Employees can only assign tasks to themselves"
             )
 
+    task_manager_id = assignee.manager_id if assignee.role == "Employee" else assignee.id
     task = Task(
         title=task_in.title,
         description=task_in.description,
         assigned_to=assigned_to,
+        manager_id=task_manager_id,
         document_id=task_in.document_id,
         meeting_id=task_in.meeting_id,
         status="Pending"
@@ -56,6 +58,7 @@ def create_task(
         "status": task.status,
         "assigned_to": task.assigned_to,
         "assignee_name": assignee_name,
+        "manager_id": task.manager_id,
         "document_id": task.document_id,
         "meeting_id": task.meeting_id,
         "created_at": task.created_at
@@ -69,13 +72,18 @@ def list_tasks(
     if current_user.role == "Admin":
         tasks = db.query(Task).all()
     elif current_user.role == "Manager":
-        # Managers see their own tasks + tasks of their subordinates
+        # Managers see their own tasks + tasks of their subordinates matching their manager ID context
         subordinate_ids = [u.id for u in db.query(User).filter(User.manager_id == current_user.id).all()]
-        subordinate_ids.append(current_user.id)
-        tasks = db.query(Task).filter(Task.assigned_to.in_(subordinate_ids)).all()
+        tasks = db.query(Task).filter(
+            (Task.assigned_to == current_user.id) | 
+            ((Task.assigned_to.in_(subordinate_ids)) & (Task.manager_id == current_user.id))
+        ).all()
     else:
-        # Employees see tasks assigned to them
-        tasks = db.query(Task).filter(Task.assigned_to == current_user.id).all()
+        # Employees see tasks assigned to them under their active manager context (or public/none)
+        tasks = db.query(Task).filter(
+            (Task.assigned_to == current_user.id) & 
+            ((Task.manager_id == current_user.manager_id) | (Task.manager_id == None))
+        ).all()
 
     # Pre-fetch users for assignee_name mapping to avoid N+1 queries
     users_dict = {u.id: (u.full_name or u.email) for u in db.query(User).all()}
@@ -89,6 +97,7 @@ def list_tasks(
             "status": t.status,
             "assigned_to": t.assigned_to,
             "assignee_name": users_dict.get(t.assigned_to) if t.assigned_to else None,
+            "manager_id": t.manager_id,
             "document_id": t.document_id,
             "meeting_id": t.meeting_id,
             "created_at": t.created_at
@@ -130,6 +139,7 @@ def update_task_status(
         if task_update.status is None and task.assigned_to != task_update.assigned_to:
             task.status = "Pending"
         task.assigned_to = task_update.assigned_to
+        task.manager_id = new_assignee.manager_id if new_assignee.role == "Employee" else new_assignee.id
 
     db.commit()
     db.refresh(task)
@@ -144,6 +154,7 @@ def update_task_status(
         "status": task.status,
         "assigned_to": task.assigned_to,
         "assignee_name": assignee_name,
+        "manager_id": task.manager_id,
         "document_id": task.document_id,
         "meeting_id": task.meeting_id,
         "created_at": task.created_at

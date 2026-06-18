@@ -91,6 +91,7 @@ class Task(Base):
     description = Column(Text, nullable=True)
     status = Column(String, default="Pending") # Pending, In_Progress, Completed
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
+    manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
