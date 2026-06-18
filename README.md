@@ -54,6 +54,49 @@ graph TB
 
 ---
 
+## 🧠 Retrieval-Augmented Generation (RAG) Architecture
+
+ProcessPilot AI implements a highly customized **RAG (Retrieval-Augmented Generation)** flow that ensures response accuracy, prevents hallucination, and strictly respects organizational security boundaries (ABAC).
+
+### How RAG Works inside ProcessPilot AI
+
+```
+[Uploaded Document (PDF/TXT/DOCX)]
+               │
+               ▼
+   [Ingestion: Chunking & Text Extraction]
+               │
+               ▼
+[Embedding: Vector generation via Gemini/OpenAI]
+               │
+               ▼
+      [Chroma Vector Database]
+               ▲
+               │ (Semantic similarity query filtered by User's Department)
+               │
+      [AI Copilot SearchAgent]
+               │
+               ▼
+ [Context injection to LLM Prompt via CEOAgent]
+               │
+               ▼
+  [Generation: LLM response with Citations]
+```
+
+1. **Ingestion & Chunking ([ingestion.py](file:///C:/Users/KIIT/Desktop/FULL_STACK/backend/app/ingestion.py))**:
+   Uploaded PDFs, TXT files, and DOCX documents are processed in the backend. The system cleanses the files and splits them into clean paragraph-sized chunks to ensure high-fidelity semantic matching.
+2. **Embedding & Storage ([vectorstore.py](file:///C:/Users/KIIT/Desktop/FULL_STACK/backend/app/vectorstore.py))**:
+   Each text chunk is sent to the configured embedding provider (Google Gemini `text-embedding-004` or OpenAI `text-embedding-3-small`) to generate a 768-dimensional vector representation. These vectors are indexed and stored securely inside a local **ChromaDB** database. *(An offline stable hash simulator serves as a fallback mode if no API keys are provided).*
+3. **Department-Scoped Retrieval ([agents.py](file:///C:/Users/KIIT/Desktop/FULL_STACK/backend/app/agents.py))**:
+   When a user submits a query inside the **AI Copilot** page, the query is passed to the `SearchAgent`. The agent runs a cosine-similarity search against ChromaDB to find the top 4 most matching text chunks.
+   * **Security Filtration**: Before running the search, the system matches the query with the user's `department_id`. The vector database only returns chunks that belong to the user's department, preventing cross-department information leakage.
+4. **Augmented Prompting & Response Generation**:
+   The retrieved text chunks are formatted as a context payload and injected directly into the system instructions for the orchestrating `CEOAgent`. The LLM reads the context, synthesizes the answer, and maps the corresponding document IDs.
+5. **Citations UI**:
+   The frontend parses the returned citations and renders clickable reference chips under the AI chat bubbles. Clicking a chip allows the user to see the exact document chunk the AI used to compile its answer.
+
+---
+
 ## 📁 Repository Structure
 
 ### Backend Modules (`/backend`)
