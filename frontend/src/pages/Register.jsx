@@ -32,7 +32,7 @@ export default function Register() {
         fullName || null,
         role,
         deptId ? parseInt(deptId) : null,
-        (role !== 'Admin' && managerId) ? parseInt(managerId) : null
+        (role !== 'Admin' && managerId && managerId !== '') ? parseInt(managerId) : null
       );
       navigate('/login');
     } catch (err) {
@@ -146,9 +146,18 @@ export default function Register() {
             </div>
             {role && role !== 'Admin' && (
               <div className="form-group">
-                <label className="form-label">Manager / HR Supervisor *</label>
-                <select className="form-select" value={managerId} onChange={e => setManagerId(e.target.value)} required>
-                  <option value="" disabled hidden>Select Supervisor</option>
+                <label className="form-label">
+                  Manager / HR Supervisor {role === 'Employee' ? '*' : '(Optional)'}
+                </label>
+                <select 
+                  className="form-select" 
+                  value={managerId} 
+                  onChange={e => setManagerId(e.target.value)} 
+                  required={role === 'Employee'}
+                >
+                  <option value="">
+                    {role === 'Employee' ? 'Select Supervisor' : 'None (Independent)'}
+                  </option>
                   {managers.map(m => (
                     <option key={m.id} value={m.id}>
                       {m.full_name || m.email} ({m.email})
