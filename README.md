@@ -97,6 +97,79 @@ ProcessPilot AI implements a highly customized **RAG (Retrieval-Augmented Genera
 
 ---
 
+## 🕸️ NetworkX Knowledge Graph Engine
+
+ProcessPilot AI integrates a local semantic **Knowledge Graph** to capture and query relational organizational context that vector stores cannot model natively. 
+
+While vector databases excel at finding semantic similarities in text chunks (e.g. finding paragraphs talking about "database strings"), a Knowledge Graph excels at answering **relational queries** (e.g. *"Find documents uploaded by Rohan Mehta that cover Docker and belong to the Engineering department"*).
+
+### Graph Entities & Relationships
+The graph is managed dynamically in [`backend/app/knowledge_graph.py`](file:///C:/Users/KIIT/Desktop/FULL_STACK/backend/app/knowledge_graph.py) and represents information as a directed network:
+
+```
+    [User Entity]
+          │
+          │ (uploaded)
+          ▼
+   [Document Entity] ──────(covers)─────► [Technology Entity]
+          │
+          │ (belongs_to)
+          ▼
+  [Department Entity]
+```
+
+* **Entity Nodes**:
+  * **User**: Identified by `user_<email>`.
+  * **Document**: Identified by `doc_<document_id>` (stores file title and extension type).
+  * **Department**: Identified by `dept_<department_name>`.
+  * **Technology**: Identified by `tech_<keyword>` (automatically parsed from document titles, e.g., Python, Docker, React, PostgreSQL).
+* **Directed Edges (Relationships)**:
+  * `User --(uploaded)--> Document`
+  * `Document --(belongs_to)--> Department`
+  * `Document --(covers)--> Technology`
+
+### Concurrency-Safe Cooperative File Locks
+Since multiple API requests or agent steps can attempt to query and write node connections at the same time, the graph must be guarded against race conditions. 
+* **The Solution**: ProcessPilot AI implements an atomic cooperative `FileLock` utilizing cross-platform `os.O_EXCL` flags and python's native `threading.Lock`. 
+* **The Mechanism**: Every read (`_load_internal`) and write (`_save_internal`) operation must acquire both the thread lock and write a temporary lockfile (`knowledge_graph.json.lock`) to the disk. If a concurrent process is writing, other threads wait in a polling loop, avoiding JSON corruption.
+
+### Multi-Agent Traversal Integration
+During a conversation in the **AI Copilot** console, the `CEOAgent` triggers the `GraphAgent` to perform a lookup on the graph:
+1. The `GraphAgent` traverses outgoing and incoming connections for active entities.
+2. It compiles a dictionary of neighbor nodes (e.g. who uploaded a target file, what technologies are mentioned, and what department owns it).
+3. This structural database map is injected directly into the LLM prompt to give the copilot comprehensive contextual awareness of corporate metadata.
+
+---
+
+## 🗄️ Relational Database System (SQLite & PostgreSQL)
+
+The core relational state of the application is managed via **SQLAlchemy ORM** and backed by a dynamic database layer that supports both offline development and cloud deployment environments.
+
+### Relational Schema Design
+Database schemas are defined in [`backend/app/models.py`](file:///C:/Users/KIIT/Desktop/FULL_STACK/backend/app/models.py) across 8 structured tables:
+
+1. **`departments`**: Holds organizational groupings (e.g. Engineering, HR) that organize users and files.
+2. **`users`**: User records containing profile settings, authentication hashes, and roles (`Admin`, `Manager`, `Employee`). 
+   * **Manager-Subordinate Hierarchy**: Implements a self-referential foreign key `manager_id` pointing back to `users.id`. This forms the core logic for team scoping, workload views, and task assignments.
+3. **`user_settings`**: Stores user-scoped API Keys (Gemini, OpenAI, Groq), active models, and customizable system prompts.
+4. **`documents`**: Maps files to local physical storage names, departments, and uploaders.
+5. **`document_chunks`**: Stores raw parsed text segments alongside index numbers, linking them back to the parent `documents` record with a cascading delete constraint.
+6. **`meetings`**: Houses meeting transcript histories, video/voice links, and AI-generated summaries.
+7. **`tasks`**: Tracks workflow status (`Pending`, `In Progress`, `Completed`) and references assignees, parent meetings (if generated from a sync), and related files.
+8. **`memories` & `agent_logs`**: Capture persistent long-term memory records and execution logs of the AI agents.
+
+### Multi-Database Environment Switching
+ProcessPilot AI dynamically changes its database drivers based on the `DATABASE_URL` environment parameter:
+* **Local Development**: By default, the system initializes a local `sqlite3` driver pointing to `processpilot.db` in the backend folder. It enables `check_same_thread=False` to securely handle async FastAPI requests.
+* **Production Deployments**: Simply supply a PostgreSQL connection string (e.g., `DATABASE_URL=postgresql://user:password@host:port/dbname`) in the system environment. SQLAlchemy automatically loads the appropriate dialect and switches drivers without requiring code modifications.
+
+### Database Schema Migrations (Alembic)
+To ensure database schemas remain in sync across multiple development instances and production stages, the project uses **Alembic** (`backend/alembic/`):
+* All database changes are structured into versioned Python migration scripts.
+* Executing `alembic upgrade head` dynamically creates or alters table schemas to match the latest codebase models.
+
+---
+
 ## 📁 Repository Structure
 
 ### Backend Modules (`/backend`)
