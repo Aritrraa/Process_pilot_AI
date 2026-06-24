@@ -187,8 +187,10 @@ To ensure database schemas remain in sync across multiple development instances 
 * `backend/seed_demo.py`: Script to populate the database with complete enterprise seed data.
 
 ### Frontend Pages (`/frontend/src/pages`)
+* `Landing.jsx`: Botanical-style marketing hub and swarm simulator serving as the application entry point.
 * `Login.jsx` & `Register.jsx`: Split-screen authentication views with dynamic manager dropdowns.
 * `Dashboard.jsx`: Console dashboard displaying stats, document health, and telemetry graphics.
+* `Graph.jsx`: Relational Knowledge Graph canvas displaying columns of departments, users, documents, and tasks.
 * `Documents.jsx`: File upload area and directory filters.
 * `Chat.jsx`: AI Copilot interface displaying message history, citations, and agent steps.
 * `Meetings.jsx`: Form to analyze transcripts and display generated actions.
