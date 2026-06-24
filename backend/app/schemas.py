@@ -168,3 +168,4 @@ class MemoryResponse(BaseModel):
 # Query Schemas
 class ChatQuery(BaseModel):
     message: str
+    scope: Optional[List[str]] = None

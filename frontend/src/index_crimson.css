@@ -1,62 +1,62 @@
-/* ===== GLOBAL JAPANESE TEA HOUSE & BOTANICAL GARDEN DESIGN SYSTEM ===== */
+/* ===== GLOBAL INDUSTRY RESEARCH INSTITUTE DESIGN SYSTEM ===== */
 
 :root {
   --sidebar-width: 280px;
 
-  /* Theme Palette (Tea House & Botanical Garden) */
-  --bg-app: #FAF7F2;        /* Rice White */
-  --bg-secondary: #E6E2DD;  /* Cloud Gray */
+  /* Institutional Palette (Crimson Editorial) */
+  --bg-app: #FAF8F5;
+  --bg-secondary: #F3EFE9;
   --bg-elevated: #FFFFFF;
   
-  --text-primary: #6B4F3A;   /* Tea Brown */
-  --text-secondary: #4A4A4A; /* Slate Gray */
-  --text-muted: #8F8479;
-  --text-disabled: #C4BCB4;
+  --text-primary: #2D3136;
+  --text-secondary: #5B6066;
+  --text-muted: #8C9197;
+  --text-disabled: #BAC0C6;
 
-  --border-default: #E6E2DD; /* Cloud Gray */
-  --border-subtle: #E6E2DD;
+  --border-default: #D8D1C7;
+  --border-subtle: #ECE7E0;
 
-  /* Botanical Accents */
-  --color-blue: #5B7C5D;    /* Moss Green */
-  --color-green: #7E9D72;   /* Bamboo Green */
-  --color-gold: #B86B4B;    /* Terracotta */
-  --color-teal: #7E9D72;
-  --color-gray: #E6E2DD;
+  /* Executive Accents (Deep Crimson & Forest Green) */
+  --color-blue: #A51C30;
+  --color-green: #2F6B55;
+  --color-gold: #B99239;
+  --color-teal: #2A6F7B;
+  --color-gray: #F3EFE9;
 
   /* Legacy Wayfinding Variables for Inline Compatibility */
-  --color-graphite: #4A4A4A;
-  --color-paper: #FAF7F2;
-  --color-concrete: #E6E2DD;
-  --color-petrol: #5B7C5D;
+  --color-graphite: #2D3136;
+  --color-paper: #FAF8F5;
+  --color-concrete: #E5E0D8;
+  --color-petrol: #A51C30;
 
   /* Highlights */
   --accent: var(--color-blue);
-  --accent-hover: #486249;
-  --accent-subtle: rgba(91, 124, 93, 0.06);
+  --accent-hover: #851624;
+  --accent-subtle: rgba(165, 28, 48, 0.05);
   --accent-border: var(--color-blue);
 
   /* Semantic Alerts */
-  --color-success: #5B7C5D;
-  --color-success-subtle: rgba(91, 124, 93, 0.08);
-  --color-warning: #B86B4B;
-  --color-warning-subtle: rgba(184, 107, 75, 0.08);
+  --color-success: #2E7D32;
+  --color-success-subtle: rgba(46, 125, 50, 0.08);
+  --color-warning: #D99A00;
+  --color-warning-subtle: rgba(217, 154, 0, 0.08);
   --color-danger: #B32424;
   --color-danger-subtle: rgba(179, 36, 36, 0.08);
-  --color-info: #7E9D72;
-  --color-info-subtle: rgba(126, 157, 114, 0.08);
-  --color-purple: #B86B4B;
-  --color-purple-subtle: rgba(184, 107, 75, 0.08);
+  --color-info: var(--color-teal);
+  --color-info-subtle: rgba(42, 111, 123, 0.08);
+  --color-purple: var(--color-gold);
+  --color-purple-subtle: rgba(185, 146, 57, 0.08);
 
-  /* Geometry - Soft Rectangles Only (8px radius) */
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Geometry - Strictly 0px Sharp Edges */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
 
   /* Minimal flat shadows */
-  --shadow-sm: 1px 1px 3px rgba(107, 79, 58, 0.03);
-  --shadow-md: 2px 2px 6px rgba(107, 79, 58, 0.05);
-  --shadow-lg: 3px 3px 12px rgba(107, 79, 58, 0.07);
+  --shadow-sm: 1px 1px 2px rgba(31, 41, 55, 0.03);
+  --shadow-md: 2px 2px 6px rgba(31, 41, 55, 0.05);
+  --shadow-lg: 3px 3px 12px rgba(31, 41, 55, 0.07);
 
   --transition: 150ms ease;
 }
@@ -67,7 +67,7 @@
 html { font-size: 14px; }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Source Sans Pro', sans-serif;
   background: var(--bg-app);
   color: var(--text-primary);
   line-height: 1.65;
@@ -77,20 +77,20 @@ body {
 
 /* Typography Hierarchy */
 h1, h2, h3, .brand-name {
-  font-family: 'Cormorant Garamond', serif;
+  font-family: 'Merriweather', serif;
   font-weight: 700;
-  color: var(--color-blue);
+  color: var(--text-primary);
   line-height: 1.25;
 }
 
 h4, h5, h6, .card-title, .nav-section-label, th {
-  font-family: 'Sora', sans-serif;
-  font-weight: 600;
-  color: var(--color-blue);
+  font-family: 'Libre Baskerville', serif;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 body, p, input, select, textarea, button, .btn {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Source Sans Pro', sans-serif;
 }
 
 .ibm-mono, .stat-value, .badge, .user-avatar, .msg-avatar, .step-result {
@@ -307,7 +307,7 @@ body, p, input, select, textarea, button, .btn {
   border: 1px solid var(--border-default);
   padding: 30px;
   position: relative;
-  border-radius: var(--radius-md); /* soft edges */
+  border-radius: 0px; /* strict sharp edges */
   box-shadow: var(--shadow-sm);
   transition: transform var(--transition);
 }
@@ -337,7 +337,7 @@ body, p, input, select, textarea, button, .btn {
   text-transform: uppercase; letter-spacing: 0.08em;
   text-decoration: none;
   cursor: pointer;
-  border-radius: var(--radius-sm); /* soft corners */
+  border-radius: 0px; /* strict rectangular */
   transition: all var(--transition);
   border: 1px solid var(--color-blue);
 }
@@ -488,7 +488,7 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
   color: var(--text-primary);
   font-size: 13px;
   transition: border-color var(--transition);
-  border-radius: var(--radius-sm);
+  border-radius: 0px;
 }
 .form-input:focus, .form-select:focus, .form-textarea:focus {
   outline: none;
@@ -510,7 +510,7 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   padding: 24px;
-  border-radius: var(--radius-sm);
+  border-radius: 0px;
   display: flex; flex-direction: column; justify-content: space-between;
 }
 .stat-value {

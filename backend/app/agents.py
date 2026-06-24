@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 import google.generativeai as genai
 from sqlalchemy.orm import Session
 
-from .models import User, Document, Task, Memory, AgentLog, UserSetting
+from .models import User, Document, DocumentChunk, Meeting, Task, Memory, AgentLog, UserSetting
 from .vectorstore import vector_store_manager
 
 class SearchAgent:
@@ -306,7 +306,7 @@ class CEOAgent:
                         
         return None
 
-    def process_query(self, user: User, query: str, db: Session) -> Dict[str, Any]:
+    def process_query(self, user: User, query: str, db: Session, scope: Optional[List[str]] = None) -> Dict[str, Any]:
         # Initialize or retrieve user session for agent loop tracking
         if user.id not in ACTIVE_AGENT_SESSIONS:
             ACTIVE_AGENT_SESSIONS[user.id] = {
@@ -366,7 +366,6 @@ class CEOAgent:
             if query.lower() in ("yes", "approve", "proceed", "confirm", "y"):
                 if action["type"] == "create_task":
                     try:
-                        from .models import Task
                         new_task = Task(
                             title=action["data"]["title"],
                             description=action["data"]["description"],
@@ -469,30 +468,98 @@ class CEOAgent:
         # Step 2: Retrieve long term memory for context
         user_memories = self.memory_agent.get_memories(user.id, query, db)
         
-        # Step 3: Run Search Agent (ChromaDB Vector search)
-        # Apply role check/department isolation
-        dept_id = None if user.role == "Admin" else user.department_id
-        search_results = self.search_agent.execute(query, dept_id, api_key, llm_provider)
-        
-        # Step 4: Run Incident Agent (DB metadata lookup)
-        incident_results = self.incident_agent.execute(query, db)
-        
-        # Step 4.5: Run Graph Agent (Knowledge Graph Graph-RAG lookup)
-        graph_results = self.graph_agent.execute(query)
-        
-        # Step 5: Construct full context
-        context_chunks = [res["document"] for res in search_results]
-        sources = [res["metadata"].get("file_name", "Unknown File") for res in search_results]
-        # Remove duplicate sources
-        sources = list(set(sources))
-        
-        # Assemble steps for agent logging
-        steps = [
-            {"agent": "MemoryAgent", "action": "Retrieved past context", "result": f"Found {len(user_memories.splitlines())} items"},
-            {"agent": "SearchAgent", "action": f"Searched vector store (Dept: {user.department_id if dept_id else 'All'})", "result": f"Found {len(search_results)} relevant document segments"},
-            {"agent": "IncidentAgent", "action": "Searched database ticket logs", "result": f"Found {len(incident_results)} tasks/tickets"},
-            {"agent": "GraphAgent", "action": "Queried local knowledge graph (Graph-RAG)", "result": f"Retrieved {len(graph_results)} connected entities"}
-        ]
+        # Step 3: Run Search Agent, Incident Agent, Graph Agent, or Scoped Filtering
+        if scope:
+            context_chunks = []
+            sources = []
+            incident_results = []
+            graph_results = []
+            
+            doc_ids = []
+            meet_ids = []
+            task_ids = []
+            
+            for s in scope:
+                if s.startswith("doc_"):
+                    try: doc_ids.append(int(s.split("_")[1]))
+                    except: pass
+                elif s.startswith("meet_"):
+                    try: meet_ids.append(int(s.split("_")[1]))
+                    except: pass
+                elif s.startswith("task_"):
+                    try: task_ids.append(int(s.split("_")[1]))
+                    except: pass
+            
+            # Fetch scoped documents
+            if doc_ids:
+                docs = db.query(Document).filter(Document.id.in_(doc_ids)).all()
+                for d in docs:
+                    sources.append(d.title)
+                    chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == d.id).all()
+                    for chunk in chunks:
+                        context_chunks.append(f"[Document: {d.title}] {chunk.content}")
+            
+            # Fetch scoped meetings
+            if meet_ids:
+                meets = db.query(Meeting).filter(Meeting.id.in_(meet_ids)).all()
+                for m in meets:
+                    sources.append(f"Meeting: {m.title}")
+                    context_chunks.append(
+                        f"[Meeting Transcript: {m.title}]\n"
+                        f"Summary: {m.summary or 'No summary'}\n"
+                        f"Transcript:\n{m.transcript}"
+                    )
+            
+            # Fetch scoped tasks
+            if task_ids:
+                tasks = db.query(Task).filter(Task.id.in_(task_ids)).all()
+                for t in tasks:
+                    sources.append(f"Task: {t.title}")
+                    incident_results.append({
+                        "id": t.id,
+                        "title": t.title,
+                        "description": t.description,
+                        "status": t.status,
+                        "created_at": t.created_at.strftime("%Y-%m-%d")
+                    })
+                    context_chunks.append(
+                        f"[Task Ticket: {t.title}]\n"
+                        f"Description: {t.description or 'No description'}\n"
+                        f"Status: {t.status}\n"
+                        f"Created At: {t.created_at.strftime('%Y-%m-%d')}"
+                    )
+            
+            # Deduplicate sources
+            sources = list(set(sources))
+            
+            steps = [
+                {"agent": "MemoryAgent", "action": "Retrieved past context", "result": f"Found {len(user_memories.splitlines())} items"},
+                {"agent": "SearchAgent", "action": "Applied Knowledge Graph scope filters", "result": f"Loaded {len(doc_ids)} documents, {len(meet_ids)} meetings, {len(task_ids)} tasks"}
+            ]
+        else:
+            # Apply role check/department isolation
+            dept_id = None if user.role == "Admin" else user.department_id
+            search_results = self.search_agent.execute(query, dept_id, api_key, llm_provider)
+            
+            # Run Incident Agent (DB metadata lookup)
+            incident_results = self.incident_agent.execute(query, db)
+            
+            # Run Graph Agent (Knowledge Graph Graph-RAG lookup)
+            graph_results = self.graph_agent.execute(query)
+            
+            # Construct full context
+            context_chunks = [res["document"] for res in search_results]
+            sources = [res["metadata"].get("file_name", "Unknown File") for res in search_results]
+            # Remove duplicate sources
+            sources = list(set(sources))
+            
+            # Assemble steps for agent logging
+            steps = [
+                {"agent": "MemoryAgent", "action": "Retrieved past context", "result": f"Found {len(user_memories.splitlines())} items"},
+                {"agent": "SearchAgent", "action": f"Searched vector store (Dept: {user.department_id if dept_id else 'All'})", "result": f"Found {len(search_results)} relevant document segments"},
+                {"agent": "IncidentAgent", "action": "Searched database ticket logs", "result": f"Found {len(incident_results)} tasks/tickets"},
+                {"agent": "GraphAgent", "action": "Queried local knowledge graph (Graph-RAG)", "result": f"Retrieved {len(graph_results)} connected entities"}
+            ]
         
         # Step 6: Query LLM (or fallback) for final response
         sop_needed = "sop" in query.lower() or "procedure" in query.lower() or "how to" in query.lower()
@@ -521,9 +588,23 @@ class CEOAgent:
             analytics_info = "\n".join(analytics_summary)
 
             directory_info = self._get_org_directory(db, user)
+            
+            # Query the database for the active user's assigned tasks list
+            user_tasks = db.query(Task).filter(Task.assigned_to == user.id).all()
+            user_tasks_summary = []
+            if user_tasks:
+                user_tasks_summary.append("Your Current Assigned Tasks:")
+                for t in user_tasks:
+                    user_tasks_summary.append(
+                        f"- [Task ID: task_{t.id}] Title: {t.title} | Status: {t.status} | Description: {t.description or 'No description'}"
+                    )
+            else:
+                user_tasks_summary.append("You currently have no tasks assigned to you.")
+            user_tasks_info = "\n".join(user_tasks_summary)
+
             prompt = (
                 "You are ProcessPilot AI, an Enterprise Operations Copilot.\n"
-                "Synthesize an answer for the user query using the retrieved knowledge, incident tickets, past memories, organizational directory, and system/team analytics.\n"
+                "Synthesize an answer for the user query using the retrieved knowledge, incident tickets, past memories, organizational directory, system/team analytics, and the user's specific assigned task list.\n"
                 "Adhere to strict facts. Cite documents if they are available.\n\n"
                 "SECURITY RULES for Contact Info & Details disclosure:\n"
                 "1. Admin (Independent): Can query contact info (email, id) of ANY employee or manager.\n"
@@ -540,6 +621,7 @@ class CEOAgent:
                 f"- Department ID: {user.department_id}\n"
                 f"- Manager ID: {user.manager_id}\n\n"
                 f"{directory_info}\n\n"
+                f"Your Current Assigned Tasks:\n{user_tasks_info}\n\n"
                 f"System/Team Analytics Context:\n{analytics_info}\n\n"
                 f"User: {user.email} (Role: {user.role})\n"
                 f"Query: {query}\n\n"

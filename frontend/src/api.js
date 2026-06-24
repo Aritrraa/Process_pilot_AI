@@ -70,8 +70,8 @@ export const api = {
     fetch(`${BASE_URL}/documents/${id}`, { method: 'DELETE', headers: getHeaders() }).then(handleResponse),
 
   // Chat
-  chat: (message) =>
-    fetch(`${BASE_URL}/chat/`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ message }) }).then(handleResponse),
+  chat: (message, scope = null) =>
+    fetch(`${BASE_URL}/chat/`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ message, scope }) }).then(handleResponse),
 
   // Meetings
   getMeetings: () =>
@@ -119,4 +119,11 @@ export const api = {
 
   getFullGraph: () =>
     fetch(`${BASE_URL}/knowledge-graph/full`, { headers: getHeaders() }).then(handleResponse),
+
+  deleteUser: (userId, successorId = null) =>
+    fetch(`${BASE_URL}/auth/users/${userId}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+      body: JSON.stringify({ successor_id: successorId })
+    }).then(handleResponse),
 };

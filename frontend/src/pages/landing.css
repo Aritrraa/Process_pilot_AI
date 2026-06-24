@@ -1,0 +1,1688 @@
+/* ===== JAPANESE TEA HOUSE & BOTANICAL GARDEN PREMIUM TRAVEL JOURNAL ===== */
+
+.tea-landing {
+  --tea-bg: #FAF7F2;          /* Rice White */
+  --tea-primary: #5B7C5D;     /* Moss Green */
+  --tea-secondary: #7E9D72;   /* Bamboo Green */
+  --tea-terracotta: #B86B4B;  /* Terracotta Accent */
+  --tea-sakura: #D9B7A5;      /* Sakura Pink Soft Accent */
+  --tea-text: #6B4F3A;        /* Tea Brown primary text */
+  --tea-contrast: #4A4A4A;    /* Slate Gray secondary text */
+  --tea-border: #E6E2DD;      /* Cloud Gray dividers */
+  --tea-border-dark: #6B4F3A;
+  
+  background-color: var(--tea-bg);
+  /* Textured paper overlay using a subtle grid/dot pattern */
+  background-image: 
+    radial-gradient(rgba(107, 79, 58, 0.03) 1.5px, transparent 1.5px),
+    radial-gradient(rgba(107, 79, 58, 0.02) 1.5px, transparent 1.5px);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+  
+  color: var(--tea-text);
+  font-family: 'Inter', sans-serif;
+  line-height: 1.7;
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  padding: 0;
+  margin: 0;
+}
+
+/* Typography Hierarchy */
+.tea-landing h1, 
+.tea-landing h2, 
+.tea-landing h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 700;
+  color: var(--tea-primary);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.tea-landing h4 {
+  font-family: 'Sora', sans-serif;
+  font-weight: 600;
+  color: var(--tea-primary);
+  margin: 0;
+}
+
+/* Tea-House Inspired Navigation */
+.tea-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 28px 48px;
+  border-bottom: 1px solid var(--tea-border);
+  background-color: rgba(250, 247, 242, 0.95);
+  backdrop-filter: blur(4px);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.tea-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bamboo-icon-wrap {
+  width: 32px;
+  height: 32px;
+  background-color: var(--tea-sakura);
+  color: var(--tea-primary);
+  border: 1px solid var(--tea-primary);
+  border-radius: 8px; /* soft rectangles */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(-3deg);
+  transition: all 0.3s ease;
+}
+
+.tea-brand:hover .bamboo-icon-wrap {
+  transform: rotate(5deg) scale(1.05);
+  background-color: var(--tea-primary);
+  color: #FFFFFF;
+}
+
+.tea-brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.tea-brand-text .title {
+  font-family: 'Sora', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--tea-primary);
+}
+
+.tea-brand-text .subtitle {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--tea-terracotta);
+  letter-spacing: 0.05em;
+}
+
+.tea-menu {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+}
+
+.tea-menu-link {
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tea-text);
+  text-decoration: none;
+  letter-spacing: 0.05em;
+  position: relative;
+  padding: 4px 0;
+  transition: color 0.2s ease;
+}
+
+.tea-menu-link:hover {
+  color: var(--tea-terracotta);
+}
+
+.tea-menu-link::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background-color: var(--tea-terracotta);
+  transition: width 0.25s ease;
+}
+
+.tea-menu-link:hover::after {
+  width: 100%;
+}
+
+.tea-enter-btn {
+  background: var(--tea-primary);
+  color: #FFFFFF;
+  border: 1px solid var(--tea-primary);
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  box-shadow: 2px 2px 0px rgba(107, 79, 58, 0.1);
+}
+
+.tea-enter-btn:hover {
+  background: var(--tea-terracotta);
+  border-color: var(--tea-terracotta);
+  transform: translateY(-1px);
+  box-shadow: 3px 3px 0px rgba(107, 79, 58, 0.15);
+}
+
+/* Hero Section - Storytelling Split Layout */
+.tea-hero {
+  padding: 80px 48px;
+  border-bottom: 1px solid var(--tea-border);
+}
+
+.tea-hero-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 64px;
+  align-items: center;
+}
+
+.tea-hero-story {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 640px;
+}
+
+.tea-badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  background-color: var(--tea-sakura);
+  color: var(--tea-text);
+  padding: 4px 10px;
+  border-radius: 6px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(107, 79, 58, 0.15);
+}
+
+.tea-hero-title {
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  margin-bottom: 24px;
+}
+
+.tea-hero-title .highlight {
+  color: var(--tea-terracotta);
+  position: relative;
+}
+
+.tea-hero-paragraph {
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--tea-contrast);
+  margin-bottom: 36px;
+}
+
+.tea-hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.tea-btn-primary {
+  background-color: var(--tea-primary);
+  color: #FFFFFF;
+  border: 1px solid var(--tea-primary);
+  border-radius: 8px;
+  padding: 14px 28px;
+  font-family: 'Sora', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 2px 2px 0px rgba(107, 79, 58, 0.1);
+}
+
+.tea-btn-primary:hover {
+  background-color: var(--tea-terracotta);
+  border-color: var(--tea-terracotta);
+  transform: translateY(-1px);
+}
+
+.tea-link-editorial {
+  font-family: 'Sora', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tea-text);
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.tea-link-editorial:hover {
+  color: var(--tea-terracotta);
+}
+
+/* Hero Right Side - Reading Scroll Paper */
+.tea-hero-scroll {
+  display: flex;
+  justify-content: center;
+}
+
+.scroll-paper {
+  width: 100%;
+  max-width: 400px;
+  background-color: #FAF6F0;
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 4px 4px 15px rgba(107, 79, 58, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+}
+
+/* Layered Paper fold line effect */
+.scroll-paper::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12px;
+  width: 1px;
+  height: 100%;
+  background: repeating-linear-gradient(to bottom, var(--tea-border) 0px, var(--tea-border) 4px, transparent 4px, transparent 8px);
+}
+
+.scroll-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--tea-border);
+  padding-bottom: 12px;
+  padding-left: 12px;
+}
+
+.stationery-mono {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+}
+
+.stationery-status {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--tea-primary);
+  border: 1px solid var(--tea-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.scroll-illustration {
+  height: 200px;
+  background-color: #F3ECE2;
+  border: 1px solid var(--tea-border);
+  border-radius: 6px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 16px;
+}
+
+.bamboo-line {
+  position: absolute;
+  background-color: var(--tea-primary);
+  opacity: 0.15;
+}
+
+.bamboo-line.line-1 {
+  width: 2px;
+  height: 150px;
+  left: 40px;
+  top: -20px;
+  transform: rotate(5deg);
+}
+
+.bamboo-line.line-2 {
+  width: 2px;
+  height: 180px;
+  left: 120px;
+  top: 10px;
+  transform: rotate(-3deg);
+}
+
+.organic-circle {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  background-color: var(--tea-sakura);
+  border-radius: 50%;
+  top: 20px;
+  right: 20px;
+  opacity: 0.25;
+}
+
+.scroll-log-overlay {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scroll-log-overlay h3 {
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tea-text);
+  border-bottom: 1px solid var(--tea-text);
+  width: fit-content;
+  padding-bottom: 2px;
+  letter-spacing: 0.05em;
+}
+
+.scroll-logs {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  color: var(--tea-contrast);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scroll-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  border-top: 1px solid var(--tea-border);
+  padding-top: 12px;
+  padding-left: 12px;
+}
+
+.scroll-stat-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.scroll-stat-item .num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--tea-primary);
+}
+
+.scroll-stat-item .lbl {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--tea-contrast);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Feature Section - Alternating Editorial Sections */
+.tea-features {
+  padding: 80px 48px;
+  border-bottom: 1px solid var(--tea-border);
+}
+
+.tea-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 48px;
+  align-items: center;
+  text-align: center;
+}
+
+.editorial-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+  letter-spacing: 0.08em;
+}
+
+.tea-section-title {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-transform: capitalize;
+  position: relative;
+  padding-bottom: 12px;
+}
+
+.tea-section-title::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 2px;
+  background-color: var(--tea-secondary);
+}
+
+.editorial-features-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 80px;
+}
+
+.editorial-feature-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+}
+
+.editorial-feature-row.reverse {
+  direction: rtl;
+}
+
+.editorial-feature-row.reverse .editorial-text {
+  direction: ltr;
+}
+
+.editorial-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.editorial-text .num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+}
+
+.editorial-text h3 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 12px 0 16px 0;
+}
+
+.editorial-text p {
+  font-size: 14px;
+  color: var(--tea-contrast);
+  margin-bottom: 24px;
+  line-height: 1.8;
+}
+
+.custom-icon-container {
+  width: 40px;
+  height: 40px;
+  background-color: var(--tea-sakura);
+  color: var(--tea-primary);
+  border: 1px solid var(--tea-primary);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.editorial-feature-row:hover .custom-icon-container {
+  transform: scale(1.05) rotate(5deg);
+  background-color: var(--tea-primary);
+  color: #FFFFFF;
+}
+
+.editorial-canvas {
+  display: flex;
+  justify-content: center;
+}
+
+.botanical-art-box {
+  width: 100%;
+  max-width: 360px;
+  height: 220px;
+  border: 1px solid var(--tea-border);
+  background-color: #FAF6F0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.botanical-art-box.offset {
+  transform: rotate(-1.5deg);
+}
+
+.art-line {
+  position: absolute;
+  background-color: var(--tea-border);
+}
+
+.art-line.art-h {
+  width: 100%;
+  height: 1px;
+  top: 70%;
+  left: 0;
+}
+
+.art-line.art-v {
+  width: 1px;
+  height: 100%;
+  left: 40%;
+  top: 0;
+}
+
+.art-leaf-stamp {
+  color: var(--tea-primary);
+  opacity: 0.35;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.art-leaf-stamp.secondary {
+  color: var(--tea-terracotta);
+}
+
+.editorial-feature-row:hover .art-leaf-stamp {
+  opacity: 0.8;
+  transform: scale(1.1);
+}
+
+.art-caption {
+  position: absolute;
+  bottom: 12px;
+  right: 16px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--tea-contrast);
+  opacity: 0.6;
+}
+
+/* Analytics Section - Botanical Information Boards */
+/* Analytics Section - Grounded Metrics & Verification Split Layout */
+.tea-analytics {
+  padding: 80px 48px;
+  border-bottom: 1px solid var(--tea-border);
+}
+
+.analytics-split-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  align-items: start;
+}
+
+@media (max-width: 968px) {
+  .analytics-split-layout {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+}
+
+/* Left Column: Grounded Specifications */
+.metrics-column {
+  background-color: #FFFFFF;
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  padding: 36px;
+  box-shadow: 2px 2px 10px rgba(107, 79, 58, 0.02);
+}
+
+.metrics-column-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tea-primary);
+  border-bottom: 1px solid var(--tea-border);
+  padding-bottom: 16px;
+  margin-bottom: 24px;
+  letter-spacing: 0.05em;
+}
+
+.specification-list {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.spec-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.spec-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.spec-bullet {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+}
+
+.spec-title h4 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tea-primary);
+}
+
+.spec-body-desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--tea-contrast);
+  margin: 0;
+}
+
+/* Explanation Card for Overlap Buffer */
+.spec-explanation-card {
+  background-color: rgba(126, 157, 114, 0.07);
+  border-left: 3px solid var(--tea-secondary);
+  border-radius: 6px;
+  padding: 16px;
+  margin-top: 4px;
+}
+
+.explanation-bullet-label {
+  font-family: 'Sora', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--tea-primary);
+  margin-bottom: 6px;
+}
+
+.explanation-paragraph {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--tea-text);
+  margin: 0;
+}
+
+/* Right Column: Interactive Test Suite Card */
+.verification-column {
+  position: sticky;
+  top: 100px;
+}
+
+.verification-card {
+  background-color: #FFFFFF;
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  padding: 36px;
+  box-shadow: 2px 2px 10px rgba(107, 79, 58, 0.02);
+}
+
+.verification-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+  border-bottom: 1px solid var(--tea-border);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  letter-spacing: 0.05em;
+}
+
+.verification-intro {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--tea-contrast);
+  margin-bottom: 24px;
+}
+
+.test-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.test-trigger-btn {
+  background-color: var(--tea-primary);
+  color: #FFFFFF;
+  border: 1px solid var(--tea-primary);
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.test-trigger-btn:hover:not(:disabled) {
+  background-color: var(--tea-terracotta);
+  border-color: var(--tea-terracotta);
+}
+
+.test-trigger-btn:disabled {
+  opacity: 0.85;
+  cursor: not-allowed;
+}
+
+.success-stamp {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: #FFFFFF;
+  background-color: var(--tea-primary);
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Monospace Test Terminal */
+.test-terminal {
+  background-color: #242D25; /* deep forest charcoal */
+  border: 1px solid rgba(91, 124, 93, 0.3);
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: 'IBM Plex Mono', monospace;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.terminal-header {
+  background-color: #1A221C; /* darker top bar */
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(91, 124, 93, 0.15);
+}
+
+.terminal-header span {
+  font-size: 10px;
+  color: #8CA690;
+  font-weight: 600;
+}
+
+.terminal-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.terminal-dots .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.dot-red { background-color: #EC6A5E; }
+.dot-yellow { background-color: #F4BF4F; }
+.dot-green { background-color: #61C554; }
+
+.terminal-body {
+  padding: 18px;
+  min-height: 180px;
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.terminal-idle {
+  color: #6B8070;
+  font-style: italic;
+}
+
+.terminal-logs-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.terminal-log-line {
+  color: #A3C9AA;
+  word-break: break-all;
+}
+
+.terminal-log-line:nth-child(even) {
+  color: #C3DFC8;
+}
+
+.terminal-progress-line {
+  color: var(--tea-sakura);
+  font-weight: 700;
+}
+
+.char-filled {
+  color: var(--tea-secondary);
+}
+
+.char-empty {
+  color: #384A3B;
+}
+
+/* Spinner Utilities */
+.spinner-xs {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #FFFFFF;
+  border-radius: 50%;
+  animation: spin-anim 0.6s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin-anim {
+  to { transform: rotate(360deg); }
+}
+
+/* ==========================================
+   Swarm Simulator Section (Volume III)
+   ========================================== */
+.swarm-simulator-section {
+  padding: 80px 48px;
+  border-bottom: 1px solid var(--tea-border);
+}
+
+.simulator-container {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr;
+  gap: 40px;
+  margin-top: 24px;
+}
+
+@media (max-width: 968px) {
+  .simulator-container {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+
+/* Preset Panel styling */
+.preset-panel {
+  background-color: #FFFFFF;
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  padding: 28px;
+  box-shadow: 2px 2px 10px rgba(107, 79, 58, 0.02);
+}
+
+.preset-panel h4 {
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tea-primary);
+  border-bottom: 1px solid var(--tea-border);
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+  letter-spacing: 0.05em;
+}
+
+.preset-queries {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preset-query-btn {
+  background-color: #FAF7F2;
+  color: var(--tea-text);
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.preset-query-btn:hover:not(:disabled) {
+  background-color: rgba(126, 157, 114, 0.08);
+  border-color: var(--tea-primary);
+  color: var(--tea-primary);
+  transform: translateX(3px);
+}
+
+.preset-query-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Swarm Sandbox Layout */
+.swarm-sandbox {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.swarm-flow-visualization {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .swarm-flow-visualization {
+    flex-direction: column;
+    gap: 20px;
+  }
+  .swarm-connection-line {
+    width: 2px !important;
+    height: 30px !important;
+  }
+}
+
+/* Agent Cards */
+.agent-simulation-card {
+  flex: 1;
+  background-color: #FFFFFF;
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 2px 2px 8px rgba(107, 79, 58, 0.01);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.agent-sim-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Sora', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--tea-primary);
+}
+
+.agent-simulation-card p {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--tea-contrast);
+  margin: 0;
+}
+
+.agent-simulation-card .status-badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+  background-color: rgba(184, 107, 75, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+/* Active states for Agent Cards */
+.agent-simulation-card.active-pulse {
+  border-color: var(--tea-terracotta);
+  background-color: rgba(184, 107, 75, 0.02);
+  transform: translateY(-2px);
+}
+
+.agent-simulation-card.completed {
+  border-color: var(--tea-secondary);
+  background-color: rgba(126, 157, 114, 0.02);
+}
+
+/* Connector Lines */
+.swarm-connection-line {
+  flex-grow: 1;
+  height: 2px;
+  background-color: var(--tea-border);
+  position: relative;
+  min-width: 20px;
+}
+
+.running-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0;
+  background-color: var(--tea-primary);
+  transition: width 1s linear;
+}
+
+.running-indicator.active {
+  width: 100%;
+}
+
+/* Output Console styled as travel journal / paper entry */
+.simulation-console-paper {
+  background-color: #FFFFFF;
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  box-shadow: 2px 2px 10px rgba(107, 79, 58, 0.02);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.console-header {
+  background-color: #FAF7F2;
+  border-bottom: 1px solid var(--tea-border);
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.console-header span {
+  font-family: 'Sora', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--tea-primary);
+  letter-spacing: 0.05em;
+}
+
+.console-body {
+  padding: 24px;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  background-color: #FFFFFF;
+}
+
+.console-placeholder {
+  font-style: italic;
+  color: var(--tea-contrast);
+  font-size: 13px;
+  text-align: center;
+  width: 100%;
+}
+
+.console-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--tea-primary);
+  width: 100%;
+}
+
+/* Spinner */
+.spinner-sm {
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid rgba(91, 124, 93, 0.15);
+  border-radius: 50%;
+  animation: spin-anim 0.6s linear infinite;
+  display: inline-block;
+}
+
+.console-output-text {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.console-output-text p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.console-output-text .query-text {
+  color: var(--tea-contrast);
+  border-bottom: 1px dashed var(--tea-border);
+  padding-bottom: 8px;
+}
+
+.console-output-text .response-text {
+  color: var(--tea-text);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.citation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.citation-badge span {
+  font-family: 'Sora', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+}
+
+.citation-badge .tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  background-color: rgba(184, 107, 75, 0.08);
+  color: var(--tea-terracotta);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Interactive Timeline Section */
+.tea-timeline-section {
+  padding: 80px 48px;
+  border-bottom: 1px solid var(--tea-border);
+}
+
+.tea-timeline-grid {
+  display: grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap: 48px;
+  align-items: flex-start;
+}
+
+.timeline-selector-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.timeline-tab-btn {
+  background-color: #FAF6F0;
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  padding: 16px 24px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timeline-tab-btn:hover {
+  background-color: var(--tea-bg);
+  border-color: var(--tea-secondary);
+}
+
+.timeline-tab-btn.active {
+  background-color: var(--tea-primary);
+  border-color: var(--tea-primary);
+}
+
+.timeline-tab-btn .step-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+}
+
+.timeline-tab-btn.active .step-num {
+  color: var(--tea-sakura);
+}
+
+.timeline-tab-btn .step-title {
+  font-family: 'Sora', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tea-text);
+}
+
+.timeline-tab-btn.active .step-title {
+  color: #FFFFFF;
+}
+
+/* Timeline Detail Pane */
+.timeline-detail-pane {
+  background-color: #FFFFFF;
+  border: 1px solid var(--tea-border);
+  padding: 36px;
+  border-radius: 8px;
+  box-shadow: 2px 2px 10px rgba(107, 79, 58, 0.03);
+  min-height: 340px;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-pane-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--tea-border);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.phase-lbl {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+}
+
+.detail-icon-frame {
+  width: 32px;
+  height: 32px;
+  background-color: var(--tea-sakura);
+  color: var(--tea-primary);
+  border: 1.5px solid var(--tea-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.detail-pane-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.detail-pane-desc {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--tea-contrast);
+  flex: 1;
+}
+
+.detail-pane-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--tea-border);
+  padding-top: 16px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.detail-pane-footer .status {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--tea-primary);
+}
+
+.detail-action-btn {
+  background: transparent;
+  border: none;
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tea-terracotta);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.detail-action-btn:hover {
+  color: var(--tea-primary);
+}
+
+/* Testimonials - Non-Card Travel Journal Pull Quotes */
+.tea-testimonials {
+  padding: 80px 48px;
+  background-color: #FFFFFF;
+  border-bottom: 1px solid var(--tea-border);
+}
+
+.journal-quotes-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.journal-quote-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quote-body {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  font-style: italic;
+  line-height: 1.6;
+  color: var(--tea-primary);
+  margin: 0;
+}
+
+.quote-cite {
+  font-family: 'Sora', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--tea-terracotta);
+  display: block;
+}
+
+.journal-divider-line {
+  height: 1px;
+  background-color: var(--tea-border);
+  width: 80px;
+}
+
+/* Japanese Stationery Inspired Registration Form */
+.stationery-section {
+  padding: 80px 48px;
+  border-bottom: 1px solid var(--tea-border);
+}
+
+.stationery-card-wrap {
+  display: flex;
+  justify-content: center;
+}
+
+.stationery-card {
+  width: 100%;
+  max-width: 480px;
+  background-color: #FAF6F0;
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  padding: 36px;
+  box-shadow: 2px 2px 10px rgba(107, 79, 58, 0.03);
+  position: relative;
+}
+
+.card-top-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background-color: var(--tea-terracotta);
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.stationery-card h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.stationery-card p {
+  font-size: 12px;
+  color: var(--tea-contrast);
+  margin-bottom: 24px;
+}
+
+.stationery-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stationery-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stationery-group label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+}
+
+.stationery-group input {
+  background-color: #FFFFFF;
+  border: 1px solid var(--tea-border);
+  padding: 12px 16px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  border-radius: 8px;
+  color: var(--tea-text);
+  transition: border-color 0.2s ease;
+}
+
+.stationery-group input:focus {
+  outline: none;
+  border-color: var(--tea-primary);
+}
+
+.stationery-submit-btn {
+  background-color: var(--tea-primary);
+  color: #FFFFFF;
+  border: 1px solid var(--tea-primary);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stationery-submit-btn:hover {
+  background-color: var(--tea-terracotta);
+  border-color: var(--tea-terracotta);
+}
+
+/* FAQ Accordion - Book Chapter accordion */
+.tea-faq {
+  padding: 80px 48px;
+  border-bottom: 1px solid var(--tea-border);
+}
+
+.faq-book-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.faq-book-chapter {
+  background-color: #FFFFFF;
+  border: 1px solid var(--tea-border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.faq-book-chapter:hover {
+  border-color: var(--tea-primary);
+}
+
+.chapter-header-btn {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 18px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chapter-label {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tea-primary);
+}
+
+.chapter-body-wrap {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.faq-book-chapter.open .chapter-body-wrap {
+  max-height: 200px;
+}
+
+.chapter-body-content {
+  padding: 0 24px 18px 24px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--tea-contrast);
+  opacity: 0.9;
+}
+
+/* Footer - Travel Journal Footer */
+.tea-footer {
+  padding: 80px 48px 40px 48px;
+  background-color: var(--tea-bg);
+  border-top: 1px solid var(--tea-border);
+}
+
+.footer-title-wrap {
+  border-bottom: 1px solid var(--tea-border);
+  padding-bottom: 20px;
+  margin-bottom: 40px;
+}
+
+.footer-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--tea-primary);
+  text-transform: uppercase;
+}
+
+.footer-columns {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: 40px;
+  margin-bottom: 60px;
+}
+
+.footer-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.footer-column h4 {
+  font-family: 'Sora', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--tea-terracotta);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.footer-column p {
+  font-size: 12px;
+  color: var(--tea-text);
+  opacity: 0.85;
+  line-height: 1.6;
+}
+
+.footer-stamps {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  color: var(--tea-primary);
+}
+
+.footer-column ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-column ul li span,
+.footer-column ul li a {
+  font-family: 'Sora', sans-serif;
+  font-size: 11px;
+  color: var(--tea-text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.footer-column ul li span:hover,
+.footer-column ul li a:hover {
+  color: var(--tea-terracotta);
+  text-decoration: underline;
+}
+
+.footer-bottom-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--tea-border);
+  padding-top: 20px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  color: var(--tea-contrast);
+  opacity: 0.6;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+  .tea-hero-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  
+  .tea-hero-title {
+    font-size: 48px;
+  }
+  
+  .tea-timeline-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .footer-columns {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+}
+
+@media (max-width: 768px) {
+  .tea-nav {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+  
+  .tea-menu {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+  }
+  
+  .tea-hero,
+  .tea-features,
+  .tea-analytics,
+  .tea-timeline-section,
+  .tea-testimonials,
+  .stationery-section,
+  .tea-faq,
+  .tea-footer {
+    padding: 40px 16px;
+  }
+  
+  .editorial-feature-row {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  
+  .editorial-feature-row.reverse {
+    direction: ltr;
+  }
+}

@@ -68,11 +68,43 @@ def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[s
                 ("Update team on decisions", "Communicate meeting decisions to relevant stakeholders."),
             ]
         
-        summary = (
+        # Build simulated summary dynamically from transcript keywords
+        transcript_lower = transcript.lower()
+        highlights = []
+        
+        if "marketing" in transcript_lower or "campaign" in transcript_lower:
+            highlights.append("Alignment on marketing timelines, cross-departmental campaign schedules, and brand messaging.")
+        if "hr" in transcript_lower or "hire" in transcript_lower or "recruit" in transcript_lower or "onboard" in transcript_lower:
+            highlights.append("Review of HR onboarding checklists, candidate pipelines, and employee provisioning SOPs.")
+        if "budget" in transcript_lower or "cost" in transcript_lower or "finance" in transcript_lower:
+            highlights.append("Status check on financial budgets, billing integrations, and cost optimization plans.")
+        if "security" in transcript_lower or "compliance" in transcript_lower or "ssl" in transcript_lower:
+            highlights.append("Review of team security policies, database access control keys, and SSL compliance checklists.")
+        if "migration" in transcript_lower or "aws" in transcript_lower or "kubernetes" in transcript_lower or "infra" in transcript_lower:
+            highlights.append("Discussion on Kubernetes configs, AWS cloud migration steps, and database persistence volumes.")
+        if "task" in transcript_lower or "workload" in transcript_lower:
+            highlights.append("Assessment of team task capacities, employee bandwidths, and project deadlines.")
+            
+        if not highlights:
+            # Fallback based on dialogue lines
+            lines = [l.strip() for l in transcript.split('\n') if l.strip()]
+            speaker_lines = [l for l in lines[:3] if ":" in l]
+            if speaker_lines:
+                for sl in speaker_lines:
+                    highlights.append(f"Dialogue reference: {sl}")
+            else:
+                highlights.append(f"General check-in and operational alignment regarding the core topic: '{title}'.")
+                
+        summary_lines = [
             f"Meeting '{title}' was analyzed in simulation mode. "
-            "To get AI-generated summaries with action item extraction, "
-            "configure a Gemini, Groq, or OpenAI API key in Settings."
-        )
+            "To get actual AI-generated summaries, configure your Gemini, Groq, or OpenAI API key in Settings.",
+            "",
+            "**Simulated Highlights:**",
+        ]
+        for h in highlights:
+            summary_lines.append(f"- {h}")
+            
+        summary = "\n".join(summary_lines)
         return summary, simulated_tasks
 
     # Live LLM analysis

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 import { Link, useNavigate } from 'react-router-dom';
-import { Zap, ArrowRight } from 'lucide-react';
+import { Compass, ArrowRight } from 'lucide-react';
 
 export default function Register() {
   const [fullName, setFullName] = useState('');
@@ -46,12 +46,12 @@ export default function Register() {
     <div className="auth-page">
       {/* Left panel */}
       <div className="auth-left">
-        <div className="auth-left-logo">
+        <Link to="/" className="auth-left-logo" style={{ textDecoration: 'none' }}>
           <div className="logo-mark">
-            <Zap size={18} color="white" />
+            <Compass size={18} color="white" />
           </div>
-          <span>ProcessPilot AI</span>
-        </div>
+          <span>Process Pilot</span>
+        </Link>
         <div className="auth-left-tagline">
           <h2>Enterprise Knowledge<br />at your fingertips</h2>
           <p>
@@ -80,12 +80,12 @@ export default function Register() {
       {/* Right panel */}
       <div className="auth-right">
         <div className="auth-form-wrap" style={{ maxWidth: 400 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, textDecoration: 'none' }}>
             <div className="logo-mark" style={{ width: 28, height: 28 }}>
-              <Zap size={14} color="white" />
+              <Compass size={14} color="white" />
             </div>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>ProcessPilot AI</span>
-          </div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Process Pilot</span>
+          </Link>
 
           <div className="auth-title">Create account</div>
           <div className="auth-subtitle">Join your organization's knowledge engine.</div>
@@ -179,8 +179,9 @@ export default function Register() {
             </button>
           </form>
 
-          <div className="auth-footer">
-            Have an account? <Link to="/login">Sign in</Link>
+          <div className="auth-footer" style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+            <div>Have an account? <Link to="/login">Sign in</Link></div>
+            <div style={{ fontSize: 11 }}><Link to="/">← Return to starting page</Link></div>
           </div>
         </div>
       </div>

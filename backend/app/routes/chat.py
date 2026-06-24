@@ -19,5 +19,5 @@ def chat_with_ai(
     Main endpoint for the AI Copilot.
     Orchestrates multi-agent pipeline: Search → Incident → SOP → Memory → CEO synthesis.
     """
-    result = ceo_agent.process_query(current_user, query.message, db)
+    result = ceo_agent.process_query(current_user, query.message, db, scope=query.scope)
     return result

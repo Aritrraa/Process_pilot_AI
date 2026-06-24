@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { useLocation } from 'react-router-dom';
 import { Send, Zap, ChevronDown, ChevronRight, Cpu, FileText, AlertCircle } from 'lucide-react';
 
 const suggestions = [
@@ -59,6 +60,8 @@ function renderInline(text) {
 
 export default function Chat() {
   const { user } = useAuth();
+  const location = useLocation();
+  const [activeScope, setActiveScope] = useState(location.state?.scopedNodeIds || null);
   const [messages, setMessages] = useState(() => {
     if (user?.id) {
       const stored = localStorage.getItem(`chat_history_${user.id}`);
@@ -106,7 +109,7 @@ export default function Chat() {
     setMessages(prev => [...prev, { role: 'user', content: msg }]);
     setLoading(true);
     try {
-      const res = await api.chat(msg);
+      const res = await api.chat(msg, activeScope);
       setMessages(prev => [...prev, {
         role: 'ai',
         content: res.answer,
@@ -135,9 +138,9 @@ export default function Chat() {
   const providerLabels = { gemini: 'Gemini AI', groq: 'Groq Llama-3', openai: 'OpenAI GPT', simulation: 'Simulation' };
 
   return (
-    <div className="chat-layout">
+    <div className="chat-container">
       {/* Header bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 14, borderBottom: '1px solid var(--border-subtle)', marginBottom: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 30px 14px 30px', borderBottom: '1px solid var(--border-subtle)', marginBottom: 4 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>AI Copilot</div>
           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Multi-agent RAG pipeline · Source-cited answers</div>
@@ -148,6 +151,32 @@ export default function Chat() {
           </span>
         </div>
       </div>
+
+      {activeScope && activeScope.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '10px 16px',
+          background: 'var(--accent-subtle)',
+          border: '1px solid var(--color-blue)',
+          margin: '10px 30px 12px 30px',
+          borderRadius: '4px',
+          fontSize: 12
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-blue)' }}>
+            <Cpu size={12} />
+            <span><strong>Active Context Scope:</strong> Scoped to {activeScope.length} node{activeScope.length > 1 ? 's' : ''} ({activeScope.join(', ')})</span>
+          </div>
+          <button
+            className="btn btn-ghost btn-xs"
+            onClick={() => setActiveScope(null)}
+            style={{ padding: 0, textTransform: 'none', fontSize: 11, fontWeight: 700 }}
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="chat-messages">

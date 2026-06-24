@@ -19,6 +19,7 @@ export default function Tasks() {
   const [assignedTo, setAssignedTo] = useState('');
   const [team, setTeam] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const load = () => api.getTasks().then(setTasks).catch(() => {}).finally(() => setLoading(false));
   
@@ -50,10 +51,19 @@ export default function Tasks() {
   };
 
   const safeTasks = Array.isArray(tasks) ? tasks : [];
+  const filteredTasks = safeTasks.filter(t => {
+    if (!t) return false;
+    const query = searchQuery.toLowerCase();
+    const titleMatch = t.title ? t.title.toLowerCase().includes(query) : false;
+    const descMatch = t.description ? t.description.toLowerCase().includes(query) : false;
+    const assigneeMatch = t.assignee_name ? t.assignee_name.toLowerCase().includes(query) : false;
+    return titleMatch || descMatch || assigneeMatch;
+  });
+
   const grouped = {
-    Pending: safeTasks.filter(t => t && t.status === 'Pending'),
-    In_Progress: safeTasks.filter(t => t && t.status === 'In_Progress'),
-    Completed: safeTasks.filter(t => t && t.status === 'Completed'),
+    Pending: filteredTasks.filter(t => t.status === 'Pending'),
+    In_Progress: filteredTasks.filter(t => t.status === 'In_Progress'),
+    Completed: filteredTasks.filter(t => t.status === 'Completed'),
   };
 
   const colHeaders = {
@@ -72,6 +82,17 @@ export default function Tasks() {
         <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
           <Plus size={14} /> New Task
         </button>
+      </div>
+
+      {/* Search filter bar */}
+      <div style={{ marginBottom: 20 }}>
+        <input
+          className="form-input"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search tasks by title, description, or assignee..."
+          style={{ maxWidth: 400 }}
+        />
       </div>
 
       {/* Create form */}
@@ -138,45 +159,47 @@ export default function Tasks() {
       </div>
 
       {loading ? <div className="spinner" /> : (
-        <div className="kanban-grid">
+        <div className="kanban-board">
           {Object.entries(grouped).map(([status, items]) => {
             const { label, color } = colHeaders[status];
             const cfg = STATUS[status];
             return (
-              <div key={status} className="kanban-col">
-                <div className="kanban-col-header">
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                  <span>{label}</span>
-                  <span className={`badge ${cfg.badge} kanban-count`}>{items.length}</span>
+              <div key={status} className="kanban-column">
+                <div className="kanban-column-header">
+                  <div className="kanban-column-title">
+                    <div style={{ width: 8, height: 8, background: color, flexShrink: 0 }} />
+                    <span>{label}</span>
+                  </div>
+                  <span className="kanban-column-count">{items.length}</span>
                 </div>
-                <div className="kanban-body">
+                <div className="kanban-cards">
                   {items.length === 0 && (
-                    <div className="kanban-empty">No tasks here</div>
+                    <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 12, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>No tasks here</div>
                   )}
                   {items.map(task => (
                     <div
                       key={task.id}
-                      className="kanban-card"
+                      className="task-card"
                       onClick={() => cycleStatus(task)}
                       title={`Click to move to "${cfg.next.replace('_', ' ')}"`}
                     >
-                      <div className="kanban-card-title">{task.title}</div>
+                      <div className="task-card-title">{task.title}</div>
                       {task.description && (
-                        <div className="kanban-card-desc">{task.description}</div>
+                        <div className="task-card-desc">{task.description}</div>
                       )}
                       {user && (user.role === 'Admin' || user.role === 'Manager') ? (
-                        <div style={{ marginBottom: 6 }} onClick={e => e.stopPropagation()}>
+                        <div style={{ marginBottom: 10 }} onClick={e => e.stopPropagation()}>
                           <select
                             value={task.assigned_to || ''}
                             onChange={async (e) => {
                               const newAssignee = e.target.value ? parseInt(e.target.value) : null;
                               try {
-                                await api.updateTask(task.id, null, newAssignee);
-                                load();
-                              } catch (err) { alert(err.message); }
+                                  await api.updateTask(task.id, null, newAssignee);
+                                  load();
+                                } catch (err) { alert(err.message); }
                             }}
                             className="form-select"
-                            style={{ padding: '2px 4px', fontSize: 10, height: 'auto', width: '100%', background: 'var(--bg-overlay)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}
+                            style={{ padding: '4px 8px', fontSize: 11, height: 'auto', width: '100%', background: 'var(--color-paper)', borderColor: 'var(--color-graphite)' }}
                           >
                             <option value="">Unassigned</option>
                             {team.map(member => (
@@ -188,20 +211,20 @@ export default function Tasks() {
                         </div>
                       ) : (
                         task.assignee_name && (
-                          <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span style={{ width: 12, height: 12, borderRadius: '50%', background: '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 'bold' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'IBM Plex Mono, monospace' }}>
+                            <span style={{ width: 14, height: 14, background: 'var(--color-petrol)', color: 'white', display: 'flex', alignItems: 'center', justifycontent: 'center', fontSize: 8, fontWeight: 'bold', justifyContent: 'center' }}>
                               {task.assignee_name[0].toUpperCase()}
                             </span>
                             <span>Assigned to: {task.assignee_name}</span>
                           </div>
                         )
                       )}
-                      <div className="kanban-card-footer">
-                        <span className="kanban-card-date">
-                          <Calendar size={9} style={{ display: 'inline', marginRight: 3 }} />
+                      <div className="task-card-meta">
+                        <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10 }}>
+                          <Calendar size={9} style={{ display: 'inline', marginRight: 3, verticalAlign: -1 }} />
                           {new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </span>
-                        <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 500 }}>
+                        <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, fontFamily: 'Archivo, sans-serif' }}>
                           → {cfg.nextLabel}
                         </span>
                       </div>

@@ -193,3 +193,157 @@ def select_manager(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+class UserDeleteRequest(BaseModel):
+    successor_id: Optional[int] = None
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_200_OK)
+def delete_user(
+    user_id: int,
+    payload: UserDeleteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    from ..models import Task
+
+    # 1. Access Control: Only Admin can delete accounts
+    if current_user.role != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can delete user accounts"
+        )
+
+    # 2. Find user to delete
+    user_to_delete = db.query(User).filter(User.id == user_id).first()
+    if not user_to_delete:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account not found"
+        )
+
+    # 3. Prevent self-deletion of the active admin session
+    if user_to_delete.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot delete your own admin account"
+        )
+
+    # 4. Handle Employee Deletion
+    if user_to_delete.role == "Employee":
+        manager_id = user_to_delete.manager_id
+        if manager_id:
+            # Reassign all employee's tasks to their present manager
+            db.query(Task).filter(Task.assigned_to == user_to_delete.id).update(
+                {Task.assigned_to: manager_id, Task.manager_id: manager_id},
+                synchronize_session=False
+            )
+        else:
+            # No manager: unassign tasks
+            db.query(Task).filter(Task.assigned_to == user_to_delete.id).update(
+                {Task.assigned_to: None},
+                synchronize_session=False
+            )
+        
+        # Clean settings and delete user
+        db.query(UserSetting).filter(UserSetting.user_id == user_to_delete.id).delete()
+        db.delete(user_to_delete)
+        db.commit()
+        return {"detail": "Employee account deleted and tasks transferred to manager."}
+
+    # 5. Handle Manager Deletion
+    elif user_to_delete.role == "Manager":
+        if not payload.successor_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Successor manager/employee ID is required to delete a manager"
+            )
+
+        successor = db.query(User).filter(User.id == payload.successor_id).first()
+        if not successor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Successor not found"
+            )
+
+        # Successor cannot be the deleted manager themselves
+        if successor.id == user_to_delete.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Successor cannot be the manager being deleted"
+            )
+
+        # Case A: Successor is an existing Manager
+        if successor.role == "Manager":
+            # Successor inherits deleted manager's tasks
+            db.query(Task).filter(Task.assigned_to == user_to_delete.id).update(
+                {Task.assigned_to: successor.id, Task.manager_id: successor.id},
+                synchronize_session=False
+            )
+            
+            # Successor inherits deleted manager's reports (team members)
+            reports = db.query(User).filter(User.manager_id == user_to_delete.id).all()
+            for report in reports:
+                report.manager_id = successor.id
+                # Align department to successor's department
+                report.department_id = successor.department_id
+                # Update report tasks' manager_id to successor so successor can view/manage them
+                db.query(Task).filter(Task.assigned_to == report.id).update(
+                    {Task.manager_id: successor.id},
+                    synchronize_session=False
+                )
+
+        # Case B: Successor is an Employee
+        elif successor.role == "Employee":
+            previous_manager_id = successor.manager_id
+
+            # Promote employee to Manager
+            successor.role = "Manager"
+            successor.manager_id = None
+            # Move successor to the deleted manager's department (takes over team department)
+            successor.department_id = user_to_delete.department_id
+
+            # Successor's current employee tasks are passed to their previous manager
+            if previous_manager_id:
+                db.query(Task).filter(Task.assigned_to == successor.id).update(
+                    {Task.assigned_to: previous_manager_id, Task.manager_id: previous_manager_id},
+                    synchronize_session=False
+                )
+            else:
+                db.query(Task).filter(Task.assigned_to == successor.id).update(
+                    {Task.assigned_to: None},
+                    synchronize_session=False
+                )
+
+            # Successor inherits deleted manager's tasks
+            db.query(Task).filter(Task.assigned_to == user_to_delete.id).update(
+                {Task.assigned_to: successor.id, Task.manager_id: successor.id},
+                synchronize_session=False
+            )
+
+            # Successor inherits deleted manager's reports (team members)
+            reports = db.query(User).filter(User.manager_id == user_to_delete.id).all()
+            for report in reports:
+                report.manager_id = successor.id
+                report.department_id = successor.department_id
+                # Update report tasks' manager_id to successor so successor can view/manage them
+                db.query(Task).filter(Task.assigned_to == report.id).update(
+                    {Task.manager_id: successor.id},
+                    synchronize_session=False
+                )
+
+        # Clean settings and delete user
+        db.query(UserSetting).filter(UserSetting.user_id == user_to_delete.id).delete()
+        db.delete(user_to_delete)
+        db.commit()
+        return {"detail": "Manager account deleted and tasks/reports successfully transferred."}
+
+    # 6. Handle Admin Deletion (non-self)
+    else:
+        # Clean settings and delete user
+        db.query(UserSetting).filter(UserSetting.user_id == user_to_delete.id).delete()
+        db.delete(user_to_delete)
+        db.commit()
+        return {"detail": "Admin account deleted."}
+

@@ -73,10 +73,11 @@ export default function Dashboard() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
             <div className="health-ring">
               <svg width="100" height="100" viewBox="0 0 100 100">
-                <circle className="circle-bg" cx="50" cy="50" r="40" />
+                <circle className="circle-bg" cx="50" cy="50" r="40" fill="none" />
                 <circle
                   className="circle-fill"
                   cx="50" cy="50" r="40"
+                  fill="none"
                   strokeDasharray={circumference}
                   strokeDashoffset={dashOffset}
                   style={{ stroke: health >= 70 ? 'var(--color-success)' : health >= 40 ? 'var(--color-warning)' : 'var(--color-danger)' }}
@@ -177,19 +178,61 @@ export default function Dashboard() {
       )}
 
       {/* Quick actions */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        <button className="btn btn-primary" onClick={() => navigate('/documents')}>
-          <Upload size={14} /> Upload Document
-        </button>
-        <button className="btn btn-secondary" onClick={() => navigate('/chat')}>
-          <Zap size={14} /> AI Copilot
-        </button>
-        <button className="btn btn-secondary" onClick={() => navigate('/meetings')}>
-          <Users size={14} /> New Meeting
-        </button>
-        <button className="btn btn-secondary" onClick={() => navigate('/tasks')}>
-          <CheckSquare size={14} /> Create Task
-        </button>
+      <div style={{ marginTop: 32 }}>
+        <h3 style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 16, fontFamily: 'Libre Baskerville, serif', fontWeight: 700 }}>Quick Operations</h3>
+        <div className="dashboard-actions-grid">
+          <div className="action-tile-card" onClick={() => navigate('/documents')}>
+            <div className="action-tile-icon blue">
+              <Upload size={18} />
+            </div>
+            <div>
+              <div className="action-tile-title">Upload Document</div>
+              <div className="action-tile-desc">Add PDFs, DOCX, CSVs, or text files to the repository.</div>
+            </div>
+            <div className="action-tile-footer">
+              <span>Go to files</span> <ArrowRight size={12} />
+            </div>
+          </div>
+
+          <div className="action-tile-card" onClick={() => navigate('/chat')}>
+            <div className="action-tile-icon purple">
+              <Zap size={18} />
+            </div>
+            <div>
+              <div className="action-tile-title">AI Copilot</div>
+              <div className="action-tile-desc">Query knowledge bases, audit tasks, and interact with the AI assistant.</div>
+            </div>
+            <div className="action-tile-footer">
+              <span>Start session</span> <ArrowRight size={12} />
+            </div>
+          </div>
+
+          <div className="action-tile-card" onClick={() => navigate('/meetings')}>
+            <div className="action-tile-icon green">
+              <Users size={18} />
+            </div>
+            <div>
+              <div className="action-tile-title">New Meeting</div>
+              <div className="action-tile-desc">Process transcripts to extract key summaries and action items.</div>
+            </div>
+            <div className="action-tile-footer">
+              <span>Analyze meeting</span> <ArrowRight size={12} />
+            </div>
+          </div>
+
+          <div className="action-tile-card" onClick={() => navigate('/tasks')}>
+            <div className="action-tile-icon amber">
+              <CheckSquare size={18} />
+            </div>
+            <div>
+              <div className="action-tile-title">Create Task</div>
+              <div className="action-tile-desc">Delegate tasks, track statuses, and check outstanding workloads.</div>
+            </div>
+            <div className="action-tile-footer">
+              <span>Manage tasks</span> <ArrowRight size={12} />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

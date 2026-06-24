@@ -2,18 +2,18 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   LayoutDashboard, FileText, MessageSquare, Users, CheckSquare,
-  BarChart3, Settings, LogOut, Zap, Menu, X, ChevronRight
+  BarChart3, Settings, LogOut, Compass, Menu, X, ChevronRight, Share2
 } from 'lucide-react';
 import { useState } from 'react';
 
 const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/documents', icon: FileText, label: 'Documents' },
   { to: '/chat', icon: MessageSquare, label: 'AI Copilot' },
+  { to: '/graph', icon: Share2, label: 'Knowledge Graph' },
   { to: '/meetings', icon: Users, label: 'Meetings' },
   { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function Sidebar() {
@@ -35,10 +35,10 @@ export default function Sidebar() {
         {/* Brand */}
         <div className="sidebar-brand">
           <div className="logo-mark">
-            <Zap size={18} color="white" />
+            <Compass size={18} color="white" />
           </div>
           <div className="brand-text">
-            <div className="brand-name">ProcessPilot</div>
+            <div className="brand-name">Process Pilot</div>
             <div className="brand-sub">Enterprise Copilot</div>
           </div>
         </div>
@@ -46,11 +46,11 @@ export default function Sidebar() {
         {/* Navigation */}
         <nav className="sidebar-nav">
           <div className="nav-section-label">Workspace</div>
-          {navItems.slice(0, 3).map(item => (
+          {navItems.slice(0, 4).map(item => (
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to === '/'}
+              end={item.to === '/dashboard'}
               className={({ isActive }) => isActive ? 'active' : ''}
               onClick={() => setOpen(false)}
             >
@@ -60,7 +60,7 @@ export default function Sidebar() {
           ))}
 
           <div className="nav-section-label">Manage</div>
-          {navItems.slice(3, 6).map(item => (
+          {navItems.slice(4, 7).map(item => (
             <NavLink
               key={item.to}
               to={item.to}

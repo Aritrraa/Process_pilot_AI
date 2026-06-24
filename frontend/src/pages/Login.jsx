@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Link, Navigate } from 'react-router-dom';
-import { Zap, ArrowRight } from 'lucide-react';
+import { Compass, ArrowRight } from 'lucide-react';
 
 const features = [
   'Multi-agent AI that searches, analyzes, and synthesizes knowledge',
@@ -17,7 +17,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -46,12 +46,12 @@ export default function Login() {
     <div className="auth-page">
       {/* Left panel */}
       <div className="auth-left">
-        <div className="auth-left-logo">
+        <Link to="/" className="auth-left-logo" style={{ textDecoration: 'none' }}>
           <div className="logo-mark">
-            <Zap size={18} color="white" />
+            <Compass size={18} color="white" />
           </div>
-          <span>ProcessPilot AI</span>
-        </div>
+          <span>Process Pilot</span>
+        </Link>
         <div className="auth-left-tagline">
           <h2>Enterprise Knowledge<br />at your fingertips</h2>
           <p>
@@ -75,12 +75,12 @@ export default function Login() {
       {/* Right panel */}
       <div className="auth-right">
         <div className="auth-form-wrap">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
+          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28, textDecoration: 'none' }}>
             <div className="logo-mark" style={{ width: 28, height: 28 }}>
-              <Zap size={14} color="white" />
+              <Compass size={14} color="white" />
             </div>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>ProcessPilot AI</span>
-          </div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Process Pilot</span>
+          </Link>
 
           <div className="auth-title">Sign in</div>
           <div className="auth-subtitle">Welcome back. Enter your credentials to continue.</div>
@@ -144,8 +144,9 @@ export default function Login() {
             ))}
           </div>
 
-          <div className="auth-footer">
-            No account? <Link to="/register">Create one</Link>
+          <div className="auth-footer" style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+            <div>No account? <Link to="/register">Create one</Link></div>
+            <div style={{ fontSize: 11 }}><Link to="/">← Return to starting page</Link></div>
           </div>
         </div>
       </div>

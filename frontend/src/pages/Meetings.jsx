@@ -2,6 +2,50 @@ import { useState, useEffect } from 'react';
 import { api } from '../api';
 import { Plus, ChevronDown, ChevronRight, Calendar, Clock, Users, FileText, Link as LinkIcon } from 'lucide-react';
 
+function renderInline(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ background: 'var(--bg-overlay)', padding: '1px 5px', borderRadius: 3, fontSize: '0.9em', fontFamily: 'monospace', color: 'var(--color-info)' }}>{part.slice(1, -1)}</code>;
+    return part;
+  });
+}
+
+function renderMarkdown(text) {
+  if (!text) return null;
+  const lines = text.split('\n');
+  const elements = [];
+  let listBuffer = [];
+
+  const flushList = () => {
+    if (listBuffer.length > 0) {
+      elements.push(<ul key={`ul-${elements.length}`} style={{ margin: '6px 0 6px 18px', listStyleType: 'disc' }}>{listBuffer}</ul>);
+      listBuffer = [];
+    }
+  };
+
+  lines.forEach((line, i) => {
+    if (line.startsWith('### ')) { flushList(); elements.push(<h3 key={i} style={{ fontSize: 13, fontWeight: 600, margin: '8px 0 4px' }}>{line.slice(4)}</h3>); return; }
+    if (line.startsWith('## ')) { flushList(); elements.push(<h2 key={i} style={{ fontSize: 14, fontWeight: 700, margin: '10px 0 4px' }}>{line.slice(3)}</h2>); return; }
+    if (line.startsWith('# ')) { flushList(); elements.push(<h1 key={i} style={{ fontSize: 15, fontWeight: 700, margin: '10px 0 5px' }}>{line.slice(2)}</h1>); return; }
+    if (line.startsWith('- ') || line.startsWith('* ')) {
+      listBuffer.push(<li key={i} style={{ marginBottom: 2 }}>{renderInline(line.slice(2))}</li>);
+      return;
+    }
+    if (/^\d+\.\s/.test(line)) {
+      flushList();
+      elements.push(<div key={i} style={{ paddingLeft: 18, marginBottom: 3 }}>{renderInline(line)}</div>);
+      return;
+    }
+    if (line.startsWith('---') || line.startsWith('===')) { flushList(); elements.push(<hr key={i} style={{ border: 'none', borderTop: '1px solid var(--border-subtle)', margin: '8px 0' }} />); return; }
+    if (line.trim() === '') { flushList(); elements.push(<div key={i} style={{ height: 6 }} />); return; }
+    flushList();
+    elements.push(<p key={i} style={{ marginBottom: 4 }}>{renderInline(line)}</p>);
+  });
+  flushList();
+  return elements;
+}
+
 export default function Meetings() {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,31 +133,34 @@ CTO: Perfect. Action items summary: Sarah - DR plan by Friday. Engineering Lead 
               />
             </div>
             {/* Input mode tabs */}
-            <div style={{ display: 'flex', gap: 0, marginBottom: 14, borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-color)', width: 'fit-content' }}>
+            <div style={{ display: 'flex', gap: 0, marginBottom: 14, border: '2px solid var(--color-graphite)', width: 'fit-content' }}>
               <button
                 type="button"
                 onClick={() => setInputMode('transcript')}
                 style={{
-                  padding: '7px 16px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
-                  background: inputMode === 'transcript' ? 'var(--accent)' : 'var(--bg-overlay)',
-                  color: inputMode === 'transcript' ? 'white' : 'var(--text-secondary)',
-                  transition: 'all 0.2s'
+                  padding: '8px 18px', fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+                  fontFamily: 'Archivo, sans-serif', textTransform: 'uppercase',
+                  background: inputMode === 'transcript' ? 'var(--color-petrol)' : 'var(--color-paper)',
+                  color: inputMode === 'transcript' ? 'var(--color-paper)' : 'var(--color-graphite)',
+                  borderRight: '2px solid var(--color-graphite)',
+                  transition: 'all var(--transition)'
                 }}
               >
-                <FileText size={12} style={{ marginRight: 5, verticalAlign: -2 }} />
+                <FileText size={12} style={{ marginRight: 6, verticalAlign: -2 }} />
                 Paste Transcript
               </button>
               <button
                 type="button"
                 onClick={() => setInputMode('link')}
                 style={{
-                  padding: '7px 16px', fontSize: 12, fontWeight: 500, border: 'none', cursor: 'pointer',
-                  background: inputMode === 'link' ? 'var(--accent)' : 'var(--bg-overlay)',
-                  color: inputMode === 'link' ? 'white' : 'var(--text-secondary)',
-                  transition: 'all 0.2s'
+                  padding: '8px 18px', fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+                  fontFamily: 'Archivo, sans-serif', textTransform: 'uppercase',
+                  background: inputMode === 'link' ? 'var(--color-petrol)' : 'var(--color-paper)',
+                  color: inputMode === 'link' ? 'var(--color-paper)' : 'var(--color-graphite)',
+                  transition: 'all var(--transition)'
                 }}
               >
-                <LinkIcon size={12} style={{ marginRight: 5, verticalAlign: -2 }} />
+                <LinkIcon size={12} style={{ marginRight: 6, verticalAlign: -2 }} />
                 Meeting Link
               </button>
             </div>
@@ -188,8 +235,8 @@ CTO: Perfect. Action items summary: Sarah - DR plan by Friday. Engineering Lead 
             >
               <div className="meeting-card-header">
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1 }}>
-                  <div style={{ width: 36, height: 36, background: 'var(--bg-elevated)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Users size={16} color="var(--text-muted)" />
+                  <div style={{ width: 36, height: 36, background: 'var(--bg-hover)', border: '1px solid var(--color-graphite)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Users size={16} color="var(--color-petrol)" />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="meeting-card-title">{m.title}</div>
@@ -221,7 +268,7 @@ CTO: Perfect. Action items summary: Sarah - DR plan by Friday. Engineering Lead 
               {m.summary && (
                 <div className="meeting-summary">
                   <strong style={{ color: 'var(--text-primary)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.5px' }}>AI Summary</strong>
-                  <div style={{ marginTop: 4 }}>{m.summary}</div>
+                  <div style={{ marginTop: 4 }}>{renderMarkdown(m.summary)}</div>
                 </div>
               )}
 

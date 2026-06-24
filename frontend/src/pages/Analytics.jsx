@@ -17,16 +17,75 @@ export default function Analytics() {
     }));
   };
 
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [successorId, setSuccessorId] = useState('');
+  const [allUsers, setAllUsers] = useState([]);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteClick = async (member) => {
+    if (member.role === 'Employee') {
+      if (!confirm(`Are you sure you want to delete employee "${member.name || member.email}"? All their tasks will be reassigned to their current manager.`)) return;
+      setDeleting(true);
+      try {
+        await api.deleteUser(member.id);
+        alert('Employee account deleted successfully.');
+        load();
+      } catch (err) {
+        alert(`Failed to delete employee: ${err.message}`);
+      } finally {
+        setDeleting(false);
+      }
+    } else if (member.role === 'Manager') {
+      setDeleteTarget(member);
+      setSuccessorId('');
+      try {
+        const users = await api.getTeam();
+        const candidates = users.filter(u => u.id !== member.id && u.role !== 'Admin');
+        setAllUsers(candidates);
+      } catch (err) {
+        alert(`Failed to load potential successors: ${err.message}`);
+      }
+    } else {
+      if (!confirm(`Are you sure you want to delete Admin account "${member.name || member.email}"?`)) return;
+      setDeleting(true);
+      try {
+        await api.deleteUser(member.id);
+        alert('Admin account deleted.');
+        load();
+      } catch (err) {
+        alert(`Failed to delete Admin: ${err.message}`);
+      } finally {
+        setDeleting(false);
+      }
+    }
+  };
+
+  const handleConfirmDeleteManager = async (e) => {
+    e.preventDefault();
+    if (!successorId || !deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.deleteUser(deleteTarget.id, parseInt(successorId));
+      alert(`Manager "${deleteTarget.name || deleteTarget.email}" deleted successfully. Tasks and team reports successfully transferred.`);
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      alert(`Failed to delete manager: ${err.message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const load = () => {
     setLoading(true);
     api.getAnalytics().then(setData).catch(() => {}).finally(() => setLoading(false));
+    if (user && (user.role === 'Manager' || user.role === 'Admin')) {
+      api.getManagers().then(setManagers).catch(() => {});
+    }
   };
 
   useEffect(() => {
     load();
-    if (user && (user.role === 'Manager' || user.role === 'Admin')) {
-      api.getManagers().then(setManagers).catch(() => {});
-    }
   }, [user]);
 
   const handleTransfer = async (employeeId, managerId) => {
@@ -44,7 +103,7 @@ export default function Analytics() {
   if (loading) return <div className="spinner" />;
   if (!data) return <div className="empty-state">Failed to load analytics data</div>;
 
-  const barColors = ['#ff6b00', '#ff8524', '#ffa35c', '#ffd1b3', '#9fa6b2', '#626875'];
+  const barColors = ['var(--color-blue)', 'var(--color-green)', 'var(--color-gold)', 'var(--color-teal)', 'var(--text-secondary)'];
   const docTypes = Object.entries(data.docs_by_type || {});
   const maxDoc = Math.max(...docTypes.map(([, v]) => v), 1);
 
@@ -202,10 +261,10 @@ export default function Analytics() {
                     </span>
                   </div>
                   {total > 0 ? (
-                    <div style={{ display: 'flex', height: 16, borderRadius: 4, overflow: 'hidden', background: 'var(--bg-overlay)' }}>
+                    <div style={{ display: 'flex', height: 16, border: '2px solid var(--color-graphite)', background: 'var(--bg-app)', overflow: 'hidden' }}>
                       {member.completed > 0 && (
                         <div
-                          style={{ width: `${completedPct}%`, background: 'var(--color-success)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, fontWeight: 'bold' }}
+                          style={{ width: `${completedPct}%`, background: 'var(--color-green)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', fontSize: 9, fontWeight: 'bold', fontFamily: 'IBM Plex Mono, monospace' }}
                           title={`Completed: ${member.completed}`}
                         >
                           {member.completed}
@@ -213,7 +272,7 @@ export default function Analytics() {
                       )}
                       {member.in_progress > 0 && (
                         <div
-                          style={{ width: `${inProgressPct}%`, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, fontWeight: 'bold' }}
+                          style={{ width: `${inProgressPct}%`, background: 'var(--color-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', fontSize: 9, fontWeight: 'bold', fontFamily: 'IBM Plex Mono, monospace' }}
                           title={`In Progress: ${member.in_progress}`}
                         >
                           {member.in_progress}
@@ -221,7 +280,7 @@ export default function Analytics() {
                       )}
                       {member.pending > 0 && (
                         <div
-                          style={{ width: `${pendingPct}%`, background: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 9, fontWeight: 'bold' }}
+                          style={{ width: `${pendingPct}%`, background: 'var(--color-gray)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-graphite)', fontSize: 9, fontWeight: 'bold', fontFamily: 'IBM Plex Mono, monospace' }}
                           title={`Pending: ${member.pending}`}
                         >
                           {member.pending}
@@ -229,7 +288,7 @@ export default function Analytics() {
                       )}
                     </div>
                   ) : (
-                    <div style={{ height: 16, borderRadius: 4, background: 'var(--bg-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text-muted)' }}>
+                    <div style={{ height: 16, border: '2px dashed var(--color-graphite)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>
                       No tasks assigned
                     </div>
                   )}
@@ -352,24 +411,18 @@ export default function Analytics() {
               </thead>
               <tbody>
                 {data.team_details.team_members.map(member => (
-                  <tr key={member.id} style={member.is_manager ? { background: 'rgba(124, 58, 237, 0.05)' } : {}}>
+                  <tr key={member.id} style={member.is_manager ? { background: 'var(--bg-hover)' } : {}}>
                     <td style={{ fontWeight: 500 }}>
-                      {member.name} {member.is_manager && <span style={{ fontSize: 10, color: 'var(--accent)', marginLeft: 6, padding: '2px 6px', background: 'rgba(124, 58, 237, 0.15)', borderRadius: 4 }}>You / Manager</span>}
+                      {member.name} {member.is_manager && <span className="badge badge-amber" style={{ marginLeft: 6 }}>You / Manager</span>}
                     </td>
                     <td>{member.email}</td>
                     <td>
-                      <span 
-                        style={
-                          member.is_manager 
-                            ? { background: 'rgba(124, 58, 237, 0.15)', color: '#a78bfa', border: '1px solid rgba(124, 58, 237, 0.2)', padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 500 }
-                            : { background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 500 }
-                        }
-                      >
+                      <span className={`badge ${member.is_manager ? 'badge-purple' : 'badge-neutral'}`}>
                         {member.role}
                       </span>
                     </td>
                     <td>
-                      <span style={{ background: 'rgba(156, 163, 175, 0.08)', color: '#9ca3af', border: '1px solid rgba(156, 163, 175, 0.15)', padding: '2px 8px', borderRadius: 12, fontSize: 11 }}>
+                      <span className="badge badge-cyan">
                         {member.department}
                       </span>
                     </td>
@@ -431,52 +484,40 @@ export default function Analytics() {
                 key={idx} 
                 className="card" 
                 style={{ 
-                  background: 'rgba(255, 255, 255, 0.02)', 
-                  border: '1px solid rgba(255, 255, 255, 0.05)',
-                  boxShadow: 'none',
                   margin: 0
                 }}
               >
                 <div 
                   style={{ 
-                    padding: '12px 16px', 
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                    padding: '14px 18px', 
+                    borderBottom: '2px solid var(--color-graphite)',
                     display: 'flex', 
                     justifyContent: 'space-between', 
                     alignItems: 'center',
-                    background: 'rgba(255, 255, 255, 0.01)'
+                    background: 'var(--bg-hover)'
                   }}
                 >
                   <div>
-                    <h3 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: 'var(--color-graphite)' }}>
                       Team {team.manager_name}
                     </h3>
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '2px 0 0 0', fontFamily: 'IBM Plex Mono, monospace' }}>
                       Manager: {team.manager_email} • Department: {team.department}
                     </p>
                   </div>
-                  <span 
-                    style={{ 
-                      background: 'rgba(124, 58, 237, 0.15)', 
-                      color: '#a78bfa', 
-                      border: '1px solid rgba(124, 58, 237, 0.3)', 
-                      padding: '2px 10px', 
-                      borderRadius: 12, 
-                      fontSize: 11, 
-                      fontWeight: 600 
-                    }}
-                  >
+                  <span className="badge badge-amber">
                     {team.team_size} members
                   </span>
                 </div>
-                <div className="table-wrap" style={{ margin: 0 }}>
+                <div className="table-wrap" style={{ margin: 0, borderWidth: '0 0 1px 0' }}>
                   <table style={{ borderCollapse: 'collapse', width: '100%' }}>
                     <thead>
-                      <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                        <th style={{ padding: '8px 16px', fontSize: 11 }}>Member Name</th>
-                        <th style={{ padding: '8px 16px', fontSize: 11 }}>Email</th>
-                        <th style={{ padding: '8px 16px', fontSize: 11 }}>Role</th>
-                        <th style={{ padding: '8px 16px', fontSize: 11 }}>Department</th>
+                      <tr>
+                        <th>Member Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Department</th>
+                        <th style={{ width: 100 }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -484,29 +525,35 @@ export default function Analytics() {
                         <tr 
                           key={member.id} 
                           style={{ 
-                            borderBottom: '1px solid rgba(255, 255, 255, 0.02)',
-                            background: member.is_manager ? 'rgba(124, 58, 237, 0.02)' : 'transparent'
+                            background: member.is_manager ? 'var(--bg-hover)' : 'transparent'
                           }}
                         >
-                          <td style={{ padding: '10px 16px', fontWeight: 500, fontSize: 12 }}>
-                            {member.name} {member.is_manager && <span style={{ fontSize: 9, color: 'var(--accent)', marginLeft: 6, padding: '1px 4px', background: 'rgba(124, 58, 237, 0.15)', borderRadius: 3 }}>Manager / Lead</span>}
+                          <td style={{ fontWeight: 500, fontSize: 13 }}>
+                            {member.name} {member.is_manager && <span className="badge badge-amber" style={{ marginLeft: 6 }}>Manager / Lead</span>}
                           </td>
-                          <td style={{ padding: '10px 16px', fontSize: 12 }}>{member.email}</td>
-                          <td style={{ padding: '10px 16px' }}>
-                            <span 
-                              style={
-                                member.is_manager 
-                                  ? { background: 'rgba(124, 58, 237, 0.15)', color: '#a78bfa', border: '1px solid rgba(124, 58, 237, 0.2)', padding: '1px 6px', borderRadius: 8, fontSize: 10, fontWeight: 500 }
-                                  : { background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '1px 6px', borderRadius: 8, fontSize: 10, fontWeight: 500 }
-                              }
-                            >
+                          <td>{member.email}</td>
+                          <td>
+                            <span className={`badge ${member.is_manager ? 'badge-purple' : 'badge-neutral'}`}>
                               {member.role}
                             </span>
                           </td>
-                          <td style={{ padding: '10px 16px' }}>
-                            <span style={{ background: 'rgba(156, 163, 175, 0.08)', color: '#9ca3af', border: '1px solid rgba(156, 163, 175, 0.15)', padding: '1px 6px', borderRadius: 8, fontSize: 10 }}>
+                          <td>
+                            <span className="badge badge-cyan">
                               {member.department}
                             </span>
+                          </td>
+                          <td>
+                            {member.id !== user?.id ? (
+                              <button
+                                className="btn btn-danger btn-xs"
+                                onClick={() => handleDeleteClick(member)}
+                                disabled={deleting}
+                              >
+                                Delete
+                              </button>
+                            ) : (
+                              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono, monospace' }}>Active Self</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -588,6 +635,62 @@ export default function Analytics() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(32, 33, 36, 0.6)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          padding: 20
+        }}>
+          <div className="card" style={{ maxWidth: '440px', width: '100%', background: 'var(--color-paper)' }}>
+            <div className="card-header">
+              <div className="card-title">Select Team Successor</div>
+              <button className="btn btn-ghost btn-xs" onClick={() => setDeleteTarget(null)}>Cancel</button>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
+              You are deleting Manager <strong>{deleteTarget.name || deleteTarget.email}</strong>. 
+              Please select a successor (an existing Manager or an Employee to promote) to inherit the team and the manager's tasks.
+            </div>
+            <form onSubmit={handleConfirmDeleteManager}>
+              <div className="form-group">
+                <label className="form-label">Successor *</label>
+                <select
+                  className="form-select"
+                  value={successorId}
+                  onChange={e => setSuccessorId(e.target.value)}
+                  required
+                >
+                  <option value="" disabled hidden>Select successor...</option>
+                  {allUsers.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name || u.email} ({u.role}{u.role === 'Employee' ? ' - Will Promote' : ''})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+                <button
+                  type="submit"
+                  className="btn btn-danger"
+                  disabled={deleting || !successorId}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                >
+                  {deleting ? 'Transferring & Deleting...' : 'Confirm Deletion'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setDeleteTarget(null)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
