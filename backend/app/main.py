@@ -1,5 +1,6 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from .config import settings
 from .database import Base, engine, get_db
@@ -7,6 +8,47 @@ from .routes import auth, documents, meetings, tasks, settings as settings_route
 
 # Create all database tables on startup
 Base.metadata.create_all(bind=engine)
+
+class DynamicCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        origin = request.headers.get("Origin")
+        
+        # Handle preflight (OPTIONS) requests
+        if request.method == "OPTIONS" and origin:
+            is_allowed = False
+            if "localhost" in origin or "127.0.0.1" in origin:
+                is_allowed = True
+            elif origin.endswith(".vercel.app"):
+                is_allowed = True
+            elif origin in settings.BACKEND_CORS_ORIGINS:
+                is_allowed = True
+                
+            if is_allowed:
+                headers = {
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+                    "Access-Control-Max-Age": "600",
+                }
+                return Response(content="OK", media_type="text/plain", headers=headers)
+        
+        response = await call_next(request)
+        if origin:
+            is_allowed = False
+            if "localhost" in origin or "127.0.0.1" in origin:
+                is_allowed = True
+            elif origin.endswith(".vercel.app"):
+                is_allowed = True
+            elif origin in settings.BACKEND_CORS_ORIGINS:
+                is_allowed = True
+                
+            if is_allowed:
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+                response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+        return response
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -16,14 +58,7 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS — allow dynamic frontend origins from settings
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(DynamicCORSMiddleware)
 
 # Mount all API routers under /api/v1
 app.include_router(auth.router, prefix=settings.API_V1_STR)
