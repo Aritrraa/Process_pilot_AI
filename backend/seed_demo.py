@@ -1263,14 +1263,14 @@ def seed():
             managers[user_data["email"]] = res_json["id"]
             print(f"  ✓ {user_data['email']} ({user_data['role']}) — ID: {res_json['id']}")
         else:
-            print(f"  ⚠ {user_data['email']} may already exist, fetching profile...")
+            print(f"  ⚠ {user_data['email']} may already exist (Register status: {r.status_code}, body: {r.text}), fetching profile...")
             login_r = requests.post(f"{BASE_URL}/auth/login", json={"email": user_data["email"], "password": user_data["password"]})
             if login_r.status_code == 200:
                 user_id = login_r.json()["user"]["id"]
                 managers[user_data["email"]] = user_id
                 print(f"    Fetched existing ID: {user_id}")
             else:
-                print(f"    Failed to retrieve existing ID!")
+                print(f"    Failed to retrieve existing ID! Login status: {login_r.status_code}, body: {login_r.text}")
 
     # Retrieve Sarah's and Mark's database IDs
     sarah_id = managers.get("sarah@processpilot.ai")
@@ -1299,14 +1299,14 @@ def seed():
             user_ids[emp['email']] = emp_id
             print(f"  ✓ {emp['email']} ({emp['role']}) — reports to manager ID {emp['manager_id']}")
         else:
-            print(f"  ⚠ {emp['email']} may already exist, fetching profile...")
+            print(f"  ⚠ {emp['email']} may already exist (Register status: {r.status_code}, body: {r.text}), fetching profile...")
             login_r = requests.post(f"{BASE_URL}/auth/login", json={"email": emp["email"], "password": emp["password"]})
             if login_r.status_code == 200:
                 emp_id = login_r.json()["user"]["id"]
                 user_ids[emp['email']] = emp_id
                 print(f"    Fetched existing ID: {emp_id}")
             else:
-                print(f"    Failed to retrieve existing ID!")
+                print(f"    Failed to retrieve existing ID! Login status: {login_r.status_code}, body: {login_r.text}")
 
     # ── 4. Login and Fetch Tokens ─────────────────────────────────────────────
     print("\n[3/6] Authenticating users...")
@@ -1329,7 +1329,7 @@ def seed():
         if r.status_code == 200:
             tokens[email] = r.json()["access_token"]
         else:
-            print(f"  ✗ Login failed for {email}!")
+            print(f"  ✗ Login failed for {email}! Status: {r.status_code}, Response: {r.text}")
             
     admin_token = tokens.get("admin@processpilot.ai")
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
