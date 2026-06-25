@@ -1214,15 +1214,20 @@ def seed():
     print("  ProcessPilot AI — Rich Demo Data Seeder v3")
     print("=" * 65)
 
+    from urllib.parse import urlparse
+    parsed = urlparse(BASE_URL)
+    root_url = f"{parsed.scheme}://{parsed.netloc}"
+
     # ── 1. Check server ───────────────────────────────────────────────────────
     try:
-        r = requests.get(f"http://localhost:8000/health", timeout=5)
+        r = requests.get(f"{root_url}/health", timeout=15)
         if r.status_code == 200:
-            print("\n[✓] Server is running")
+            print(f"\n[✓] Server is running at {root_url}")
         else:
-            print("\n[✗] Server returned unexpected status. Continuing anyway...")
-    except Exception:
-        print("\n[✗] Cannot connect to server at http://localhost:8000")
+            print(f"\n[✗] Server returned unexpected status {r.status_code}. Continuing anyway...")
+    except Exception as e:
+        print(f"\n[✗] Cannot connect to server at {root_url}/health")
+        print(f"    Error: {e}")
         print("    Please start the backend first:")
         print("    cd backend && python run.py")
         sys.exit(1)
