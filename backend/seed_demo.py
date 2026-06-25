@@ -20,7 +20,7 @@ if hasattr(sys.stdout, 'reconfigure'):
     except Exception:
         pass
 
-BASE_URL = "http://localhost:8000/api/v1"
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000/api/v1")
 
 # ────────────────────────────────────────────────────────────────────────────
 # RICH DOCUMENT CONTENT
