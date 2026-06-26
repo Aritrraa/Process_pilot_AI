@@ -489,6 +489,25 @@ class CEOAgent:
                 elif s.startswith("task_"):
                     try: task_ids.append(int(s.split("_")[1]))
                     except: pass
+                elif s.startswith("tech_") or s.startswith("dept_") or s.startswith("user_"):
+                    from .knowledge_graph import knowledge_graph
+                    neighbors = knowledge_graph.get_neighbors(s)
+                    for n in neighbors:
+                        n_id = n["id"]
+                        if n_id.startswith("doc_"):
+                            try: doc_ids.append(int(n_id.split("_")[1]))
+                            except: pass
+                        elif n_id.startswith("meet_"):
+                            try: meet_ids.append(int(n_id.split("_")[1]))
+                            except: pass
+                        elif n_id.startswith("task_"):
+                            try: task_ids.append(int(n_id.split("_")[1]))
+                            except: pass
+            
+            # Deduplicate IDs to avoid duplicate processing of linked files/tasks
+            doc_ids = list(set(doc_ids))
+            meet_ids = list(set(meet_ids))
+            task_ids = list(set(task_ids))
             
             # Fetch scoped documents
             if doc_ids:
