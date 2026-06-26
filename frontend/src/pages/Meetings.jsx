@@ -240,7 +240,7 @@ CTO: Perfect. Action items summary: Sarah - DR plan by Friday. Engineering Lead 
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="meeting-card-title">{m.title}</div>
-                    <div className="meeting-card-meta" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div className="meeting-card-meta" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                         <Calendar size={10} />
                         {new Date(m.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}

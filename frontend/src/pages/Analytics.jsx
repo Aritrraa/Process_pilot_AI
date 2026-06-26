@@ -168,7 +168,7 @@ export default function Analytics() {
       </div>
 
       {/* Stats */}
-      <div className="stats-grid" style={{ gridTemplateColumns: `repeat(${statCards.length}, 1fr)` }}>
+      <div className="stats-grid">
         {statCards.map(s => (
           <div key={s.label} className="stat-card">
             <div className={`stat-card-icon ${s.color}`}>

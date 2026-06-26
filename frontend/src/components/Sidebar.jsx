@@ -28,9 +28,18 @@ export default function Sidebar() {
 
   return (
     <>
-      <button className="mobile-toggle" onClick={() => setOpen(!open)}>
-        {open ? <X size={18} /> : <Menu size={18} />}
-      </button>
+      {/* Mobile Top Header Bar */}
+      <div className="mobile-header-bar">
+        <button className="mobile-menu-btn" onClick={() => setOpen(!open)} aria-label="Toggle navigation">
+          {open ? <X size={18} /> : <Menu size={18} />}
+        </button>
+        <div className="mobile-brand-title">
+          <Compass size={14} className="mobile-brand-logo" />
+          <span>Process Pilot</span>
+        </div>
+        <div style={{ width: 34 }} /> {/* Balance spacer to align title center */}
+      </div>
+
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         {/* Brand */}
         <div className="sidebar-brand">
