@@ -121,3 +121,60 @@ class Memory(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
     user = relationship("User", back_populates="memories")
+
+
+class AuditLog(Base):
+    """Tracks all significant actions for compliance and security auditing."""
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action = Column(String, index=True)  # login, upload, delete, access_denied, chat
+    resource_type = Column(String, nullable=True)  # document, task, meeting, user
+    resource_id = Column(Integer, nullable=True)
+    details = Column(Text, nullable=True)
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
+class LLMUsage(Base):
+    """Tracks LLM API usage for cost monitoring."""
+    __tablename__ = "llm_usage"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    provider = Column(String)  # gemini, openai, groq, simulation
+    model_name = Column(String, nullable=True)
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    estimated_cost = Column(String, default="0.0")
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
+class Conversation(Base):
+    """Persistent conversation history for the AI Copilot."""
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    title = Column(String, default="New Conversation")
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc),
+                        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    messages = relationship("ConversationMessage", back_populates="conversation", cascade="all, delete-orphan")
+
+
+class ConversationMessage(Base):
+    """Individual messages within a conversation."""
+    __tablename__ = "conversation_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"))
+    role = Column(String)  # user, ai
+    content = Column(Text)
+    sources_json = Column(JSON, nullable=True)
+    steps_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    conversation = relationship("Conversation", back_populates="messages")

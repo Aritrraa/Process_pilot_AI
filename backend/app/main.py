@@ -1,10 +1,20 @@
+import logging
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
 from .config import settings
 from .database import Base, engine, get_db
-from .routes import auth, documents, meetings, tasks, settings as settings_routes, chat, analytics_routes, knowledge_graph_routes
+from .routes import auth, documents, meetings, tasks, settings as settings_routes, chat, analytics_routes, knowledge_graph_routes, ws
+
+# Configure structured logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+)
+logger = logging.getLogger("processpilot")
 
 # Create all database tables on startup
 Base.metadata.create_all(bind=engine)
@@ -53,10 +63,34 @@ class DynamicCORSMiddleware(BaseHTTPMiddleware):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Enterprise Knowledge & Operations Copilot — Multi-Agent AI, RAG, Knowledge Graphs, Analytics",
-    version="1.0.0",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# ──── Global Exception Handlers ────
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch all unhandled exceptions — log details but return sanitized error to client."""
+    logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Please try again later."}
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Return structured validation errors."""
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Validation error",
+            "errors": [
+                {"field": ".".join(str(loc) for loc in err["loc"]), "message": err["msg"]}
+                for err in exc.errors()
+            ]
+        }
+    )
 
 app.add_middleware(DynamicCORSMiddleware)
 
@@ -69,6 +103,7 @@ app.include_router(settings_routes.router, prefix=settings.API_V1_STR)
 app.include_router(chat.router, prefix=settings.API_V1_STR)
 app.include_router(analytics_routes.router, prefix=settings.API_V1_STR)
 app.include_router(knowledge_graph_routes.router, prefix=settings.API_V1_STR)
+app.include_router(ws.router, prefix=settings.API_V1_STR)
 
 
 @app.on_event("startup")
@@ -81,53 +116,54 @@ def startup_populate_knowledge_graph():
         # Check if knowledge graph is empty
         stats = knowledge_graph.get_graph_stats()
         if stats.get("total_entities", 0) == 0:
-            print("[KnowledgeGraph] Graph is empty. Populating from existing database records...")
+            logger.info("[KnowledgeGraph] Graph is empty. Populating from existing database records...")
             db = SessionLocal()
-            
-            # 1. Index Departments
-            depts = db.query(Department).all()
-            for d in depts:
-                knowledge_graph.add_entity(f"dept_{d.name}", "Department", {"name": d.name})
+            try:
+                # 1. Index Departments
+                depts = db.query(Department).all()
+                for d in depts:
+                    knowledge_graph.add_entity(f"dept_{d.name}", "Department", {"name": d.name})
+                    
+                # 2. Index Users & Manager relationships
+                users = db.query(User).all()
+                user_map = {u.id: u for u in users}
+                for u in users:
+                    user_node = f"user_{u.email}"
+                    knowledge_graph.add_entity(user_node, "User", {"email": u.email, "name": u.full_name or u.email, "role": u.role})
+                    
+                    # Link to department
+                    if u.department_id:
+                        dept = next((d for d in depts if d.id == u.department_id), None)
+                        if dept:
+                            knowledge_graph.add_relationship(user_node, f"dept_{dept.name}", "member_of")
+                    
+                    # Link to manager
+                    if u.manager_id and u.manager_id in user_map:
+                        manager = user_map[u.manager_id]
+                        knowledge_graph.add_relationship(user_node, f"user_{manager.email}", "reports_to")
                 
-            # 2. Index Users & Manager relationships
-            users = db.query(User).all()
-            user_map = {u.id: u for u in users}
-            for u in users:
-                user_node = f"user_{u.email}"
-                knowledge_graph.add_entity(user_node, "User", {"email": u.email, "name": u.full_name or u.email, "role": u.role})
+                # 3. Index Documents
+                docs = db.query(Document).all()
+                for doc in docs:
+                    uploader = user_map.get(doc.uploaded_by)
+                    uploader_email = uploader.email if uploader else "admin@processpilot.ai"
+                    
+                    dept = next((d for d in depts if d.id == doc.department_id), None)
+                    dept_name = dept.name if dept else "General"
+                    
+                    knowledge_graph.index_document(
+                        document_id=doc.id,
+                        title=doc.title,
+                        file_type=doc.file_type,
+                        department_name=dept_name,
+                        uploader_email=uploader_email
+                    )
+            finally:
+                db.close()
                 
-                # Link to department
-                if u.department_id:
-                    dept = next((d for d in depts if d.id == u.department_id), None)
-                    if dept:
-                        knowledge_graph.add_relationship(user_node, f"dept_{dept.name}", "member_of")
-                
-                # Link to manager
-                if u.manager_id and u.manager_id in user_map:
-                    manager = user_map[u.manager_id]
-                    knowledge_graph.add_relationship(user_node, f"user_{manager.email}", "reports_to")
-            
-            # 3. Index Documents
-            docs = db.query(Document).all()
-            for doc in docs:
-                uploader = user_map.get(doc.uploaded_by)
-                uploader_email = uploader.email if uploader else "admin@processpilot.ai"
-                
-                dept = next((d for d in depts if d.id == doc.department_id), None)
-                dept_name = dept.name if dept else "General"
-                
-                knowledge_graph.index_document(
-                    document_id=doc.id,
-                    title=doc.title,
-                    file_type=doc.file_type,
-                    department_name=dept_name,
-                    uploader_email=uploader_email
-                )
-                
-            db.close()
-            print(f"[KnowledgeGraph] Dynamic seeding complete. Entities: {knowledge_graph.get_graph_stats()['total_entities']}, Relationships: {knowledge_graph.get_graph_stats()['total_relationships']}")
+            logger.info(f"[KnowledgeGraph] Dynamic seeding complete. Entities: {knowledge_graph.get_graph_stats()['total_entities']}, Relationships: {knowledge_graph.get_graph_stats()['total_relationships']}")
     except Exception as e:
-        print(f"[KnowledgeGraph] Error during startup indexing: {e}")
+        logger.error(f"[KnowledgeGraph] Error during startup indexing: {e}")
 
 
 @app.get("/")
@@ -135,9 +171,9 @@ def root():
     return {
         "project": settings.PROJECT_NAME,
         "status": "operational",
-        "version": "1.0.0",
+        "version": "2.0.0",
+        "environment": settings.ENVIRONMENT,
         "docs": "/docs",
-        "frontend": "http://localhost:5173",
     }
 
 
@@ -170,7 +206,8 @@ def health_detailed():
         status_report["database"] = "ok"
         status_report["database_documents"] = doc_count
     except Exception as e:
-        status_report["database"] = f"error: {str(e)}"
+        status_report["database"] = "error"
+        logger.error(f"Health check DB error: {e}")
 
     # Check ChromaDB vector store
     try:
@@ -179,7 +216,8 @@ def health_detailed():
         status_report["vector_store"] = "ok"
         status_report["vector_store_count"] = count
     except Exception as e:
-        status_report["vector_store"] = f"error: {str(e)}"
+        status_report["vector_store"] = "error"
+        logger.error(f"Health check vector store error: {e}")
 
     all_ok = all(v == "ok" for k, v in status_report.items() if k.endswith("_store") or k in ("database", "api"))
     status_report["overall"] = "healthy" if all_ok else "degraded"

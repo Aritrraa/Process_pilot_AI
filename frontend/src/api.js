@@ -63,8 +63,8 @@ export const api = {
     return fetch(`${BASE_URL}/documents/upload`, { method: 'POST', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }, body: formData }).then(handleResponse);
   },
 
-  getDocuments: () =>
-    fetch(`${BASE_URL}/documents/`, { headers: getHeaders() }).then(handleResponse),
+  getDocuments: (skip = 0, limit = 50) =>
+    fetch(`${BASE_URL}/documents/?skip=${skip}&limit=${limit}`, { headers: getHeaders() }).then(handleResponse),
 
   deleteDocument: (id) =>
     fetch(`${BASE_URL}/documents/${id}`, { method: 'DELETE', headers: getHeaders() }).then(handleResponse),
@@ -74,15 +74,15 @@ export const api = {
     fetch(`${BASE_URL}/chat/`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ message, scope }) }).then(handleResponse),
 
   // Meetings
-  getMeetings: () =>
-    fetch(`${BASE_URL}/meetings/`, { headers: getHeaders() }).then(handleResponse),
+  getMeetings: (skip = 0, limit = 50) =>
+    fetch(`${BASE_URL}/meetings/?skip=${skip}&limit=${limit}`, { headers: getHeaders() }).then(handleResponse),
 
   createMeeting: (title, transcript, meetingLink = null) =>
     fetch(`${BASE_URL}/meetings/`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ title, transcript, meeting_link: meetingLink }) }).then(handleResponse),
 
   // Tasks
-  getTasks: () =>
-    fetch(`${BASE_URL}/tasks/`, { headers: getHeaders() }).then(handleResponse),
+  getTasks: (skip = 0, limit = 50) =>
+    fetch(`${BASE_URL}/tasks/?skip=${skip}&limit=${limit}`, { headers: getHeaders() }).then(handleResponse),
 
   createTask: (title, description, assignedTo = null, documentId = null, meetingId = null) =>
     fetch(`${BASE_URL}/tasks/`, { 

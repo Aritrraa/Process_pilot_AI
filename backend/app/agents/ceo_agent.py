@@ -1,177 +1,20 @@
 import os
 import datetime
+import json
 from typing import List, Dict, Any, Optional
-import google.generativeai as genai
 from sqlalchemy.orm import Session
 
-from .models import User, Document, DocumentChunk, Meeting, Task, Memory, AgentLog, UserSetting
-from .vectorstore import vector_store_manager
+from ..models import User, Document, DocumentChunk, Meeting, Task, Memory, AgentLog, UserSetting
 
-class SearchAgent:
-    def execute(self, query: str, department_id: Optional[int], api_key: Optional[str], llm_provider: str = "simulation") -> List[Dict[str, Any]]:
-        # Retrieve chunks from ChromaDB
-        chunks = vector_store_manager.search(query, limit=4, department_id=department_id, api_key=api_key, llm_provider=llm_provider)
-        return chunks
+from .search_agent import SearchAgent
+from .incident_agent import IncidentAgent
+from .sop_agent import SOPAgent
+from .memory_agent import MemoryAgent
+from .graph_agent import GraphAgent
+from .comparison_agent import ComparisonAgent
+from ..llm_client import LLMClient
 
-class IncidentAgent:
-    def execute(self, query: str, db: Session) -> List[Dict[str, Any]]:
-        # Retrieve tasks/tickets related to logs/incidents
-        # Query task titles or descriptions containing parts of the query
-        import re
-        cleaned_query = re.sub(r'[^\w\s]', ' ', query)
-        keywords = [word.lower() for word in cleaned_query.split() if len(word) > 3]
-        if not keywords:
-            return []
-        
-        # Simple text matching in DB for demo purposes
-        matching_tasks = []
-        for keyword in keywords[:3]:
-            tasks = db.query(Task).filter(
-                (Task.title.like(f"%{keyword}%")) | 
-                (Task.description.like(f"%{keyword}%"))
-            ).limit(3).all()
-            for t in tasks:
-                if t.id not in [x["id"] for x in matching_tasks]:
-                    matching_tasks.append({
-                        "id": t.id,
-                        "title": t.title,
-                        "description": t.description,
-                        "status": t.status,
-                        "created_at": t.created_at.strftime("%Y-%m-%d")
-                    })
-        return matching_tasks
-
-class GraphAgent:
-    def execute(self, query: str) -> List[Dict[str, Any]]:
-        # Query local NetworkX knowledge graph for entities and neighbors
-        from .knowledge_graph import knowledge_graph
-        
-        # Simple extraction of keywords (cleaning punctuation)
-        import re
-        cleaned_query = re.sub(r'[^\w\s]', ' ', query)
-        keywords = [word.lower() for word in cleaned_query.split() if len(word) > 3]
-        if not keywords:
-            return []
-            
-        results = []
-        # Search node IDs or properties
-        for node_id, data in knowledge_graph.graph.nodes(data=True):
-            node_type = data.get("type", "Unknown")
-            # If any keyword is in the node ID or properties
-            match = False
-            if any(kw in str(node_id).lower() for kw in keywords):
-                match = True
-            else:
-                for k, v in data.items():
-                    if any(kw in str(v).lower() for kw in keywords):
-                        match = True
-                        break
-                        
-            if match:
-                # Find connected neighbors/relationships
-                neighbors = knowledge_graph.get_neighbors(node_id)
-                results.append({
-                    "entity_id": node_id,
-                    "type": node_type,
-                    "properties": {k: v for k, v in data.items() if k != "type"},
-                    "connections": [
-                        {
-                            "target": n["id"],
-                            "relationship": n["relationship"],
-                            "type": n.get("type", "Unknown"),
-                            "direction": n["direction"]
-                        } for n in neighbors[:4] # limit to 4 connected neighbors to avoid context explosion
-                    ]
-                })
-        return results[:3] # Return top 3 matched entities
-
-class SOPAgent:
-    def execute(self, query: str, context_chunks: List[str], api_key: Optional[str], llm_provider: str = "simulation", system_prompt: Optional[str] = None) -> str:
-        """
-        Creates/formats SOPs or instructions.
-        """
-        prompt = (
-            "You are an expert Operations SOP (Standard Operating Procedure) writer.\n"
-            "Based on the following document context, draft a standard operating procedure "
-            "answering the user's query.\n"
-            f"Query: {query}\n\n"
-            f"Context:\n" + "\n---\n".join(context_chunks) + "\n\n"
-            "Create a clean, formatted Markdown document with sections: 'Overview', 'Prerequisites', 'Step-by-Step Procedure', 'Safety/Verification'."
-        )
-        if system_prompt:
-            prompt = f"System Instruction: {system_prompt}\n\n{prompt}"
-        
-        if not api_key or llm_provider == "simulation":
-            # Fallback mock template generator
-            return (
-                f"# Standard Operating Procedure: {query.capitalize()} (Simulation Mode)\n\n"
-                "## Overview\n"
-                "This SOP outlines the protocol for handling the requested process as extracted from local files.\n\n"
-                "## Prerequisites\n"
-                "- Verify environment variables\n"
-                "- Ensure access permissions are granted\n\n"
-                "## Step-by-Step Procedure\n"
-                "1. **Analyze logs & requirements**: Search for related configurations in settings.\n"
-                "2. **Execute Deployment / Operations**: Follow standard deployment instructions.\n"
-                "3. **Post-execution review**: Audit status logs to confirm success.\n\n"
-                "## Verification\n"
-                "- Run standard health check endpoint to verify uptime."
-            )
-            
-        if llm_provider == "openai":
-            try:
-                from openai import OpenAI
-                client = OpenAI(api_key=api_key)
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                return response.choices[0].message.content
-            except Exception as e:
-                return f"Error generating SOP via OpenAI API: {str(e)}"
-                
-        elif llm_provider == "groq":
-            try:
-                from groq import Groq
-                client = Groq(api_key=api_key)
-                response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                return response.choices[0].message.content
-            except Exception as e:
-                return f"Error generating SOP via Groq API: {str(e)}"
-                
-        elif llm_provider == "gemini":
-            try:
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                response = model.generate_content(prompt)
-                return response.text
-            except Exception as e:
-                return f"Error generating SOP via Gemini API: {str(e)}"
-        
-        return "Unsupported LLM provider."
-
-class MemoryAgent:
-    def get_memories(self, user_id: int, query: str, db: Session) -> str:
-        # Get past conversation memories
-        memories = db.query(Memory).filter(Memory.user_id == user_id).all()
-        if not memories:
-            return "No previous long-term memories stored."
-        
-        memory_str = "\n".join([f"- {m.key}: {m.value}" for m in memories])
-        return memory_str
-
-    def save_memory(self, user_id: int, key: str, value: str, db: Session):
-        # Update or create memory
-        existing = db.query(Memory).filter(Memory.user_id == user_id, Memory.key == key).first()
-        if existing:
-            existing.value = value
-        else:
-            new_memory = Memory(user_id=user_id, key=key, value=value)
-            db.add(new_memory)
-        db.commit()
+llm_client = LLMClient()
 
 ACTIVE_AGENT_SESSIONS = {}
 
@@ -182,6 +25,7 @@ class CEOAgent:
         self.sop_agent = SOPAgent()
         self.memory_agent = MemoryAgent()
         self.graph_agent = GraphAgent()
+        self.comparison_agent = ComparisonAgent()
 
     def _get_org_directory(self, db: Session, user: User) -> str:
         all_users = db.query(User).all()
@@ -305,6 +149,37 @@ class CEOAgent:
                         return "Sorry, you do not have permission to view this reporting structure."
                         
         return None
+
+    def _build_conversation_history(self, db: Session, user: User, max_tokens: int = 2500) -> str:
+        logs = db.query(AgentLog).filter(AgentLog.user_id == user.id).order_by(AgentLog.id.desc()).limit(15).all()
+        if not logs:
+            return "No previous conversation history."
+            
+        try:
+            import tiktoken
+            enc = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            enc = None
+            
+        history_chunks = []
+        current_tokens = 0
+        truncated = False
+        
+        for log in logs:
+            turn = f"User: {log.query}\nProcessPilot AI: {log.response}\n"
+            if enc:
+                tokens = len(enc.encode(turn))
+                if current_tokens + tokens > max_tokens:
+                    truncated = True
+                    break
+                current_tokens += tokens
+            history_chunks.append(turn)
+            
+        if truncated:
+            history_chunks.append("[System Note: Earlier conversation history was summarized/truncated to preserve LLM context window limits.]\n")
+            
+        history_chunks.reverse()
+        return "\n".join(history_chunks)
 
     def process_query(self, user: User, query: str, db: Session, scope: Optional[List[str]] = None) -> Dict[str, Any]:
         # Initialize or retrieve user session for agent loop tracking
@@ -490,7 +365,7 @@ class CEOAgent:
                     try: task_ids.append(int(s.split("_")[1]))
                     except: pass
                 elif s.startswith("tech_") or s.startswith("dept_") or s.startswith("user_"):
-                    from .knowledge_graph import knowledge_graph
+                    from ..knowledge_graph import knowledge_graph
                     neighbors = knowledge_graph.get_neighbors(s)
                     for n in neighbors:
                         n_id = n["id"]
@@ -566,12 +441,21 @@ class CEOAgent:
             # Run Graph Agent (Knowledge Graph Graph-RAG lookup)
             graph_results = self.graph_agent.execute(query)
             
+            # Run Comparison Agent if necessary
+            comparison_needed = any(word in query.lower() for word in ["compare", "difference", "differences", "versus", " vs "])
+            comparison_results = ""
+            if comparison_needed:
+                comparison_results = self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
+            
             # Construct full context
             context_chunks = [res["document"] for res in search_results]
             sources = [res["metadata"].get("file_name", "Unknown File") for res in search_results]
             # Remove duplicate sources
             sources = list(set(sources))
             
+            if comparison_needed and comparison_results:
+                context_chunks.append(f"[Document Comparison Report]\n{comparison_results}")
+
             # Assemble steps for agent logging
             steps = [
                 {"agent": "MemoryAgent", "action": "Retrieved past context", "result": f"Found {len(user_memories.splitlines())} items"},
@@ -579,6 +463,8 @@ class CEOAgent:
                 {"agent": "IncidentAgent", "action": "Searched database ticket logs", "result": f"Found {len(incident_results)} tasks/tickets"},
                 {"agent": "GraphAgent", "action": "Queried local knowledge graph (Graph-RAG)", "result": f"Retrieved {len(graph_results)} connected entities"}
             ]
+            if comparison_needed:
+                steps.append({"agent": "ComparisonAgent", "action": "Compared documents", "result": "Generated comparison report"})
         
         # Step 6: Query LLM (or fallback) for final response
         sop_needed = "sop" in query.lower() or "procedure" in query.lower() or "how to" in query.lower()
@@ -587,7 +473,7 @@ class CEOAgent:
             steps.append({"agent": "SOPAgent", "action": f"Generating structured markdown procedure using {llm_provider}", "result": "Success"})
             answer = self.sop_agent.execute(query, context_chunks, api_key, llm_provider, system_prompt)
         else:
-            from .analytics import get_system_analytics
+            from ..analytics import get_system_analytics
             analytics_data = get_system_analytics(db, user)
             
             # Format analytics details nicely
@@ -620,6 +506,8 @@ class CEOAgent:
             else:
                 user_tasks_summary.append("You currently have no tasks assigned to you.")
             user_tasks_info = "\n".join(user_tasks_summary)
+            
+            conversation_history = self._build_conversation_history(db, user)
 
             prompt = (
                 "You are ProcessPilot AI, an Enterprise Operations Copilot.\n"
@@ -644,11 +532,16 @@ class CEOAgent:
                 f"System/Team Analytics Context:\n{analytics_info}\n\n"
                 f"User: {user.email} (Role: {user.role})\n"
                 f"Query: {query}\n\n"
+                f"Recent Conversation History:\n{conversation_history}\n\n"
                 f"User Memories:\n{user_memories}\n\n"
                 f"Retrieved Document Context:\n" + "\n---\n".join(context_chunks) + "\n\n"
                 f"Related Tickets/Incidents:\n" + str(incident_results) + "\n\n"
                 "Answer the user clearly. Highlight steps, source citations, and any related incidents/tickets if applicable."
             )
+            
+            # Context window tracking feature to be implemented here
+            # Add token count calculation or truncate history...
+            
             if system_prompt:
                 prompt = f"System Instruction: {system_prompt}\n\n{prompt}"
                 
@@ -696,42 +589,16 @@ class CEOAgent:
                         f"*(Please configure your Gemini, Groq, or OpenAI API Key in Settings to unlock real-time LLM answers)*"
                     )
                 steps.append({"agent": "CEOAgent", "action": "Synthesized response (Simulation)", "result": "Success"})
-            elif llm_provider == "openai":
-                try:
-                    from openai import OpenAI
-                    client = OpenAI(api_key=api_key)
-                    response = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    answer = response.choices[0].message.content
-                    steps.append({"agent": "CEOAgent", "action": "Synthesized response via OpenAI", "result": "Success"})
-                except Exception as e:
-                    answer = f"Error generating response via OpenAI API: {str(e)}"
-                    steps.append({"agent": "CEOAgent", "action": "OpenAI generation failed", "result": "Error"})
-            elif llm_provider == "groq":
-                try:
-                    from groq import Groq
-                    client = Groq(api_key=api_key)
-                    response = client.chat.completions.create(
-                        model="llama-3.1-8b-instant",
-                        messages=[{"role": "user", "content": prompt}]
-                    )
-                    answer = response.choices[0].message.content
-                    steps.append({"agent": "CEOAgent", "action": "Synthesized response via Groq", "result": "Success"})
-                except Exception as e:
-                    answer = f"Error generating response via Groq API: {str(e)}"
-                    steps.append({"agent": "CEOAgent", "action": "Groq generation failed", "result": "Error"})
-            elif llm_provider == "gemini":
-                try:
-                    genai.configure(api_key=api_key)
-                    model = genai.GenerativeModel('gemini-1.5-flash')
-                    response = model.generate_content(prompt)
-                    answer = response.text
-                    steps.append({"agent": "CEOAgent", "action": "Synthesized response via Gemini", "result": "Success"})
-                except Exception as e:
-                    answer = f"Error generating response via Gemini API: {str(e)}"
-                    steps.append({"agent": "CEOAgent", "action": "Gemini generation failed", "result": "Error"})
+            else:
+                answer = llm_client.call(
+                    provider=llm_provider,
+                    api_key=api_key,
+                    system_prompt=system_prompt,
+                    user_message=prompt,
+                    db=db,
+                    user_id=user.id
+                )
+                steps.append({"agent": "CEOAgent", "action": f"Synthesized response via {llm_provider}", "result": "Success"})
                     
         # Step 7: Update Long-Term Memory if the query contains important personal settings or context
         if "remember" in query.lower() or "my name is" in query.lower() or "deploy" in query.lower():
@@ -760,4 +627,132 @@ class CEOAgent:
             "steps": steps
         }
 
+    def process_query_stream(self, user: User, query: str, db: Session, scope: Optional[List[str]] = None):
+        """
+        Stream the LLM response as Server-Sent Events (SSE).
+        Re-uses the context gathering from the normal pipeline, but streams the LLM completion.
+        """
+        import json
+        from ..llm_client import llm_client
+
+        # Get context (same as process_query but optimized for stream setup)
+        user_settings = db.query(UserSetting).filter(UserSetting.user_id == user.id).first()
+        api_key = None
+        llm_provider = "simulation"
+        system_prompt = None
+        if user_settings:
+            llm_provider = user_settings.llm_provider or "simulation"
+            system_prompt = user_settings.system_prompt
+            if llm_provider == "gemini": api_key = user_settings.gemini_api_key
+            elif llm_provider == "openai": api_key = user_settings.openai_api_key
+            elif llm_provider == "groq": api_key = user_settings.groq_api_key
+
+        # Memory
+        user_memories = "\n".join([f"- {m.key}: {m.value}" for m in db.query(Memory).filter(Memory.user_id == user.id).all()])
+        
+        steps = []
+        
+        # Scope + Dept isolation
+        dept_id = None if user.role == "Admin" else user.department_id
+        search_results = self.search_agent.execute(query, dept_id, api_key, llm_provider)
+        steps.append({"agent": "SearchAgent", "action": "Queried Vector DB for context", "result": "Success"})
+        
+        incident_results = self.incident_agent.execute(query, db)
+        if incident_results:
+            steps.append({"agent": "IncidentAgent", "action": "Matched semantic incident tickets", "result": "Success"})
+            
+        graph_results = self.graph_agent.execute(query)
+        if graph_results:
+            steps.append({"agent": "GraphAgent", "action": "Queried organizational knowledge graph", "result": "Success"})
+        
+        comparison_needed = any(word in query.lower() for word in ["compare", "difference", "differences", "versus", " vs "])
+        comparison_results = ""
+        if comparison_needed:
+            comparison_results = self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
+            steps.append({"agent": "ComparisonAgent", "action": "Executed document comparison", "result": "Success"})
+            
+        context_chunks = [res["document"] for res in search_results]
+        if comparison_needed and comparison_results:
+            context_chunks.append(f"[Document Comparison Report]\n{comparison_results}")
+
+        sources = list(set([res["metadata"].get("file_name", "Unknown File") for res in search_results]))
+        
+        from ..analytics import get_system_analytics
+        analytics_data = get_system_analytics(db, user)
+        analytics_summary = []
+        analytics_summary.append("System & Team Analytics Overview:")
+        analytics_summary.append(f"- Documentation Health Score: {analytics_data.get('documentation_health')}%")
+        analytics_summary.append(f"- Task Status Distribution: {analytics_data.get('task_status')}")
+        analytics_info = "\n".join(analytics_summary)
+        directory_info = self._get_org_directory(db, user)
+        
+        user_tasks = db.query(Task).filter(Task.assigned_to == user.id).all()
+        user_tasks_summary = [f"- {t.title} [{t.status}]" for t in user_tasks] if user_tasks else ["No tasks"]
+        user_tasks_info = "\n".join(user_tasks_summary)
+        
+        conversation_history = self._build_conversation_history(db, user)
+
+        sop_needed = "sop" in query.lower() or "procedure" in query.lower() or "how to" in query.lower()
+        if sop_needed:
+            prompt = (
+                "You are an expert Operations SOP writer.\n"
+                f"Query: {query}\n\n"
+                f"Context:\n" + "\n---\n".join(context_chunks) + "\n\n"
+                "Create a clean, formatted Markdown document with sections: 'Overview', 'Prerequisites', 'Step-by-Step Procedure', 'Safety/Verification'."
+            )
+        else:
+            prompt = (
+                "You are ProcessPilot AI, an Enterprise Operations Copilot.\n"
+                "Synthesize an answer for the user query using the retrieved knowledge, incident tickets, past memories, organizational directory, system/team analytics, and the user's specific assigned task list.\n"
+                f"User Details: {user.email} (Role: {user.role})\n"
+                f"{directory_info}\n"
+                f"Assigned Tasks:\n{user_tasks_info}\n"
+                f"Analytics:\n{analytics_info}\n"
+                f"Memories:\n{user_memories}\n"
+                f"Recent Conversation History:\n{conversation_history}\n"
+                f"Context:\n" + "\n---\n".join(context_chunks) + "\n"
+                f"Incidents: {incident_results}\n"
+                f"Query: {query}\n"
+            )
+            
+        if system_prompt:
+            prompt = f"System Instruction: {system_prompt}\n\n{prompt}"
+
+        # Yield initial metadata (sources, incidents) so UI can show them immediately
+        init_data = json.dumps({
+            "type": "metadata",
+            "sources": sources,
+            "incidents": incident_results,
+            "steps": steps
+        })
+        yield f"data: {init_data}\n\n"
+
+        # Stream LLM tokens
+        full_answer = ""
+        for chunk in llm_client.stream(
+            provider=llm_provider, 
+            api_key=api_key, 
+            system_prompt=system_prompt or "You are an Enterprise AI.", 
+            user_message=prompt, 
+            db=db, 
+            user_id=user.id
+        ):
+            full_answer += chunk
+            chunk_data = json.dumps({"type": "chunk", "content": chunk})
+            yield f"data: {chunk_data}\n\n"
+
+        # End of stream
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        # Save log asynchronously (in the background, but since we are yielding, we can just save it here at the end)
+        try:
+            steps.append({"agent": "CEOAgent", "action": f"Synthesized response via {llm_provider}", "result": "Success"})
+            agent_log = AgentLog(user_id=user.id, query=query, response=full_answer, agent_steps=steps)
+            db.add(agent_log)
+            db.commit()
+        except Exception:
+            pass
+
 ceo_agent = CEOAgent()
+process_query = ceo_agent.process_query
+process_query_stream = ceo_agent.process_query_stream

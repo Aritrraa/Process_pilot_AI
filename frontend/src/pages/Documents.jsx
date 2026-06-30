@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Upload, Trash2, FileText, File, Database, RefreshCw, AlertCircle } from 'lucide-react';
+import { Upload, Trash2, FileText, File, Database, RefreshCw, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const typeConfig = {
   pdf:  { badge: 'badge-red', label: 'PDF' },
@@ -12,22 +13,28 @@ const typeConfig = {
 };
 
 export default function Documents() {
+  const PAGE_SIZE = 20;
   const { user } = useAuth();
-  const [docs, setDocs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragActive, setDragActive] = useState(false);
-  const [departments, setDepartments] = useState([]);
   const [deptFilter, setDeptFilter] = useState('');
   const [toast, setToast] = useState('');
   const fileRef = useRef();
 
-  const load = () => api.getDocuments().then(setDocs).catch(() => {}).finally(() => setLoading(false));
-  useEffect(() => {
-    load();
-    api.getDepartments().then(setDepartments).catch(() => {});
-  }, []);
+  const { data: docs = [], isLoading: loading, refetch: load } = useQuery({
+    queryKey: ['documents', page],
+    queryFn: () => api.getDocuments(page * PAGE_SIZE, PAGE_SIZE),
+    keepPreviousData: true,
+  });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => api.getDepartments(),
+    staleTime: 300000,
+  });
 
   const showToast = (msg) => {
     setToast(msg);
@@ -36,6 +43,21 @@ export default function Documents() {
 
   const handleFile = async (file) => {
     if (!file) return;
+
+    // Client-side file validation
+    const maxSizeMB = 10;
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      showToast(`✗ File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum size is ${maxSizeMB}MB.`);
+      return;
+    }
+
+    const allowedTypes = ['pdf', 'docx', 'doc', 'txt', 'csv', 'md'];
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!allowedTypes.includes(ext)) {
+      showToast(`✗ File type ".${ext}" not supported. Allowed: ${allowedTypes.join(', ')}`);
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
     // Simulate progress
@@ -46,7 +68,7 @@ export default function Documents() {
       setUploadProgress(100);
       setTimeout(() => setUploadProgress(0), 800);
       showToast(`✓ "${file.name}" uploaded and indexed successfully`);
-      load();
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
     } catch (err) {
       clearInterval(interval);
       setUploadProgress(0);
@@ -68,7 +90,7 @@ export default function Documents() {
     if (!confirm(`Delete "${doc.title}" and remove all its indexed data? This cannot be undone.`)) return;
     try {
       await api.deleteDocument(doc.id);
-      setDocs(prev => prev.filter(d => d.id !== doc.id));
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
       showToast(`Deleted "${doc.title}"`);
     } catch (err) {
       showToast(`✗ Delete failed: ${err.message}`);
@@ -222,13 +244,28 @@ export default function Documents() {
         </div>
       )}
 
-      {/* Stats bar */}
-      {docs.length > 0 && (
-        <div style={{ marginTop: 12, fontSize: 11, color: 'var(--text-muted)', display: 'flex', gap: 16 }}>
-          <span>{docs.length} document{docs.length !== 1 ? 's' : ''} total</span>
-          <span>{filtered.length} shown</span>
+      {/* Pagination */}
+      <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          Page {page + 1} · {filtered.length} shown
         </div>
-      )}
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={page === 0}
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+          >
+            <ChevronLeft size={14} /> Previous
+          </button>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={docs.length < PAGE_SIZE}
+            onClick={() => setPage(p => p + 1)}
+          >
+            Next <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

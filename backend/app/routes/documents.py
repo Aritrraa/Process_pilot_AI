@@ -44,9 +44,26 @@ def upload_document(
     if not api_key:
         llm_provider = "simulation"
     
+    # Validate file type
+    file_ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
+    if file_ext not in settings.ALLOWED_FILE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type '.{file_ext}' not allowed. Supported: {', '.join(settings.ALLOWED_FILE_TYPES)}"
+        )
+    
+    # Validate file size
+    file.file.seek(0, 2)  # Seek to end
+    file_size = file.file.tell()
+    file.file.seek(0)  # Reset pointer
+    if file_size > settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File size ({file_size // (1024*1024)}MB) exceeds {settings.MAX_UPLOAD_SIZE_MB}MB limit"
+        )
+    
     # Save file to uploads folder
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    file_ext = file.filename.split(".")[-1].lower() if "." in file.filename else "txt"
     
     # Unique filename using UUID to prevent naming collision
     clean_filename = f"{uuid.uuid4()}.{file_ext}"
@@ -103,12 +120,14 @@ def upload_document(
 
 @router.get("/", response_model=list[DocumentResponse])
 def list_documents(
+    skip: int = 0,
+    limit: int = 50,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     # Role-based restriction: Employees can only view their own department's documents
     if current_user.role == "Admin":
-        return db.query(Document).all()
+        return db.query(Document).offset(skip).limit(limit).all()
     else:
         dept_id = current_user.department_id
         if not dept_id and current_user.manager_id:
@@ -120,7 +139,7 @@ def list_documents(
         return db.query(Document).filter(
             (Document.department_id == dept_id) | 
             (Document.uploaded_by == current_user.id)
-        ).all()
+        ).offset(skip).limit(limit).all()
 
 from ..abac import verify_document_access
 

@@ -7,10 +7,12 @@ from ..models import User, Department, UserSetting
 from ..schemas import UserCreate, UserLogin, Token, UserResponse, DepartmentResponse, DepartmentCreate
 from ..auth import get_password_hash, verify_password, create_access_token, get_current_user
 from ..config import settings
+from ..rate_limiter import rate_limit
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(rate_limit(limit=3, window=3600))])
 def register(user_in: UserCreate, db: Session = Depends(get_db)):
     # Check if user already exists
     existing = db.query(User).filter(User.email == user_in.email).first()
@@ -18,6 +20,13 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
+        )
+
+    # Security: Block self-registration as Admin
+    if user_in.role == "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin accounts cannot be self-registered. Contact your administrator."
         )
         
     # Verify department if provided
@@ -50,7 +59,8 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     
     return user
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token,
+             dependencies=[Depends(rate_limit(limit=5, window=60))])
 def login(user_in: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_in.email).first()
     if not user or not verify_password(user_in.password, user.hashed_password):

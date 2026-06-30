@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+import json
+import asyncio
+
+from .ws import manager
 
 from ..database import get_db
 from ..models import User, Task
@@ -66,24 +70,26 @@ def create_task(
 
 @router.get("/", response_model=List[TaskResponse])
 def list_tasks(
+    skip: int = 0,
+    limit: int = 50,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     if current_user.role == "Admin":
-        tasks = db.query(Task).all()
+        tasks = db.query(Task).offset(skip).limit(limit).all()
     elif current_user.role == "Manager":
         # Managers see their own tasks + tasks of their subordinates matching their manager ID context
         subordinate_ids = [u.id for u in db.query(User).filter(User.manager_id == current_user.id).all()]
         tasks = db.query(Task).filter(
             (Task.assigned_to == current_user.id) | 
             ((Task.assigned_to.in_(subordinate_ids)) & (Task.manager_id == current_user.id))
-        ).all()
+        ).offset(skip).limit(limit).all()
     else:
         # Employees see tasks assigned to them under their active manager context (or public/none)
         tasks = db.query(Task).filter(
             (Task.assigned_to == current_user.id) & 
             ((Task.manager_id == current_user.manager_id) | (Task.manager_id == None))
-        ).all()
+        ).offset(skip).limit(limit).all()
 
     # Pre-fetch users for assignee_name mapping to avoid N+1 queries
     users_dict = {u.id: (u.full_name or u.email) for u in db.query(User).all()}
@@ -146,6 +152,25 @@ def update_task_status(
     
     assignee = db.query(User).filter(User.id == task.assigned_to).first() if task.assigned_to else None
     assignee_name = (assignee.full_name or assignee.email) if assignee else None
+
+    # Broadcast notification to the manager and the assignee (if not the same)
+    notification = json.dumps({
+        "type": "task_update",
+        "task_id": task.id,
+        "title": task.title,
+        "status": task.status,
+        "message": f"Task '{task.title}' status updated to {task.status}"
+    })
+    
+    # Run broadcast in background
+    try:
+        loop = asyncio.get_event_loop()
+        if task.manager_id:
+            loop.create_task(manager.send_personal_message(notification, task.manager_id))
+        if task.assigned_to and task.assigned_to != task.manager_id:
+            loop.create_task(manager.send_personal_message(notification, task.assigned_to))
+    except Exception:
+        pass
     
     return {
         "id": task.id,

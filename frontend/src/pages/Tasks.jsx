@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Plus, CheckCircle2, Clock, CircleDot, Trash2, Calendar } from 'lucide-react';
+import { Plus, CheckCircle2, Clock, CircleDot, Trash2, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const STATUS = {
   Pending: { badge: 'badge-neutral', icon: Clock, next: 'In_Progress', nextLabel: 'Start' },
@@ -10,25 +11,29 @@ const STATUS = {
 };
 
 export default function Tasks() {
+  const PAGE_SIZE = 20;
   const { user } = useAuth();
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
-  const [team, setTeam] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const load = () => api.getTasks().then(setTasks).catch(() => {}).finally(() => setLoading(false));
-  
-  useEffect(() => {
-    load();
-    if (user && (user.role === 'Admin' || user.role === 'Manager')) {
-      api.getTeam().then(setTeam).catch(() => {});
-    }
-  }, [user]);
+  const { data: tasks = [], isLoading: loading } = useQuery({
+    queryKey: ['tasks', page],
+    queryFn: () => api.getTasks(page * PAGE_SIZE, PAGE_SIZE),
+    keepPreviousData: true,
+  });
+
+  const { data: team = [] } = useQuery({
+    queryKey: ['team'],
+    queryFn: () => api.getTeam(),
+    enabled: user?.role === 'Admin' || user?.role === 'Manager',
+    staleTime: 300000,
+  });
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -37,7 +42,7 @@ export default function Tasks() {
     try {
       await api.createTask(title, desc, assignedTo ? parseInt(assignedTo) : null);
       setTitle(''); setDesc(''); setAssignedTo(''); setShowForm(false);
-      load();
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
     } catch (err) { alert(err.message); }
     finally { setSubmitting(false); }
   };
@@ -46,7 +51,7 @@ export default function Tasks() {
     const next = STATUS[task.status]?.next || 'Pending';
     try {
       await api.updateTask(task.id, next);
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: next } : t));
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
     } catch (err) { alert(err.message); }
   };
 
@@ -236,6 +241,21 @@ export default function Tasks() {
           })}
         </div>
       )}
+
+      {/* Pagination */}
+      <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          Page {page + 1}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn btn-ghost btn-sm" disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))}>
+            <ChevronLeft size={14} /> Previous
+          </button>
+          <button className="btn btn-ghost btn-sm" disabled={safeTasks.length < PAGE_SIZE} onClick={() => setPage(p => p + 1)}>
+            Next <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -247,11 +247,13 @@ def create_meeting(
 
 @router.get("/", response_model=List[MeetingResponse])
 def list_meetings(
+    skip: int = 0,
+    limit: int = 50,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     if current_user.role == "Admin":
-        return db.query(Meeting).order_by(Meeting.id.desc()).all()
+        return db.query(Meeting).order_by(Meeting.id.desc()).offset(skip).limit(limit).all()
     
     # Compile a list of user IDs whose meetings the current user is permitted to see
     allowed_uploader_ids = [current_user.id]

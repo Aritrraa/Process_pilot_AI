@@ -1,3 +1,7 @@
+"""
+Document ingestion pipeline — text extraction and semantic-aware chunking.
+Supports PDF, DOCX, TXT, CSV, and Markdown files.
+"""
 import os
 import re
 from typing import List, Dict, Any
@@ -52,24 +56,80 @@ def extract_content(file_path: str, file_type: str) -> str:
     else:
         return extract_text_from_txt(file_path)
 
+
 def chunk_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> List[str]:
     """
-    Split text into chunks of chunk_size characters with chunk_overlap characters overlap.
+    Semantic-aware recursive text splitter.
+    Splits by hierarchy: sections → paragraphs → sentences → words.
+    Preserves structural formatting better than naive character splitting.
     """
-    # Clean excessive whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    if not text:
+    if not text or not text.strip():
         return []
+    
+    # Normalize excessive whitespace while preserving paragraph breaks
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = text.strip()
+    
+    if len(text) <= chunk_size:
+        return [text]
+    
+    # Separators in order of priority (most meaningful boundaries first)
+    separators = ["\n## ", "\n### ", "\n\n", "\n", ". ", "; ", ", ", " "]
+    
+    def _split_recursive(text: str, seps: List[str]) -> List[str]:
+        if len(text) <= chunk_size:
+            return [text.strip()] if text.strip() else []
         
-    chunks = []
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += chunk_size - chunk_overlap
+        # Try each separator starting from most meaningful
+        for sep in seps:
+            if sep in text:
+                parts = text.split(sep)
+                chunks = []
+                current = ""
+                
+                for part in parts:
+                    candidate = current + sep + part if current else part
+                    
+                    if len(candidate) <= chunk_size:
+                        current = candidate
+                    else:
+                        if current.strip():
+                            chunks.append(current.strip())
+                        
+                        # If single part exceeds chunk_size, recurse with finer separators
+                        if len(part) > chunk_size:
+                            remaining_seps = seps[seps.index(sep) + 1:]
+                            if remaining_seps:
+                                chunks.extend(_split_recursive(part, remaining_seps))
+                            else:
+                                # Last resort: hard split with overlap
+                                for i in range(0, len(part), chunk_size - chunk_overlap):
+                                    chunk = part[i:i + chunk_size]
+                                    if chunk.strip():
+                                        chunks.append(chunk.strip())
+                        else:
+                            current = part
+                
+                if current.strip():
+                    chunks.append(current.strip())
+                
+                if chunks:
+                    return chunks
         
-    return chunks
+        # No separator found — hard split with overlap
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + chunk_size
+            chunk = text[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+            start += chunk_size - chunk_overlap
+        return chunks
+    
+    return _split_recursive(text, separators)
+
 
 def process_file_upload(file_path: str, file_type: str, document_id: int) -> List[Dict[str, Any]]:
     """

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { BarChart3, TrendingUp, Search, Users, FileText, MessageSquare, CheckSquare, RefreshCw } from 'lucide-react';
+import { BarChart3, TrendingUp, Search, Users, FileText, MessageSquare, CheckSquare, RefreshCw, Cpu } from 'lucide-react';
 
 export default function Analytics() {
   const { user } = useAuth();
@@ -232,6 +232,58 @@ export default function Analytics() {
           )}
         </div>
       </div>
+
+      {/* LLM Cost & Usage */}
+      {data.llm_usage && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-header">
+            <div className="card-title"><Cpu size={15} /> LLM Token Usage & Costs</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '16px 20px' }}>
+            <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 200, background: 'var(--bg-secondary)', padding: 16, borderRadius: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Total Estimated Cost</div>
+                <div style={{ fontSize: 24, fontWeight: 600, color: 'var(--color-success)' }}>${data.llm_usage.total_cost.toFixed(4)}</div>
+              </div>
+              <div style={{ flex: 1, minWidth: 200, background: 'var(--bg-secondary)', padding: 16, borderRadius: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Total Input Tokens</div>
+                <div style={{ fontSize: 24, fontWeight: 600 }}>{data.llm_usage.total_input_tokens.toLocaleString()}</div>
+              </div>
+              <div style={{ flex: 1, minWidth: 200, background: 'var(--bg-secondary)', padding: 16, borderRadius: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Total Output Tokens</div>
+                <div style={{ fontSize: 24, fontWeight: 600 }}>{data.llm_usage.total_output_tokens.toLocaleString()}</div>
+              </div>
+            </div>
+            
+            <h4 style={{ fontSize: 14, fontWeight: 500, margin: '8px 0 0' }}>Usage by Provider</h4>
+            <div className="table-responsive">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Provider</th>
+                    <th>API Calls</th>
+                    <th>Estimated Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(data.llm_usage.by_provider).map(([provider, details]) => (
+                    <tr key={provider}>
+                      <td><span className="badge badge-neutral">{provider}</span></td>
+                      <td>{details.calls}</td>
+                      <td style={{ color: 'var(--color-success)', fontWeight: 500 }}>${details.cost.toFixed(4)}</td>
+                    </tr>
+                  ))}
+                  {Object.keys(data.llm_usage.by_provider).length === 0 && (
+                    <tr>
+                      <td colSpan="3" style={{ textAlign: 'center', opacity: 0.5 }}>No LLM usage recorded yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Team workload graph/breakdown */}
       {data.team_workload && data.team_workload.length > 0 && (

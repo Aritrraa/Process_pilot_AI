@@ -1,13 +1,13 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
 
 # Auth Schemas
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=8, max_length=128)
     full_name: Optional[str] = None
-    role: Optional[str] = "Employee"
+    role: Optional[Literal["Employee", "Manager"]] = "Employee"
     department_id: Optional[int] = None
     manager_id: Optional[int] = None
 
@@ -41,7 +41,7 @@ class UserSettingsUpdate(BaseModel):
     gemini_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
-    llm_provider: Optional[str] = "simulation"
+    llm_provider: Optional[Literal["simulation", "gemini", "groq", "openai"]] = "simulation"
     system_prompt: Optional[str] = None
 
 class UserSettingsResponse(BaseModel):
@@ -59,7 +59,7 @@ class UserSettingsResponse(BaseModel):
 
 # Department Schemas
 class DepartmentCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
 
 class DepartmentResponse(BaseModel):
@@ -95,7 +95,7 @@ class DocumentChunkResponse(BaseModel):
 
 # Meeting Schemas
 class MeetingCreate(BaseModel):
-    title: str
+    title: str = Field(..., min_length=1, max_length=500)
     transcript: Optional[str] = ""
     meeting_link: Optional[str] = None
 
@@ -113,14 +113,14 @@ class MeetingResponse(BaseModel):
 
 # Task Schemas
 class TaskCreate(BaseModel):
-    title: str
+    title: str = Field(..., min_length=1, max_length=500)
     description: Optional[str] = None
     assigned_to: Optional[int] = None
     document_id: Optional[int] = None
     meeting_id: Optional[int] = None
 
 class TaskUpdate(BaseModel):
-    status: Optional[str] = None # Pending, In_Progress, Completed
+    status: Optional[Literal["Pending", "In_Progress", "Completed"]] = None
     assigned_to: Optional[int] = None
 
 class TaskResponse(BaseModel):
@@ -167,5 +167,14 @@ class MemoryResponse(BaseModel):
 
 # Query Schemas
 class ChatQuery(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=10000)
     scope: Optional[List[str]] = None
+    stream: bool = True
+
+# Pagination
+class PaginatedResponse(BaseModel):
+    items: List[Any]
+    total: int
+    page: int
+    page_size: int
+    pages: int

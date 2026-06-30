@@ -4,6 +4,7 @@ import google.generativeai as genai
 from typing import List, Dict, Any, Optional
 import chromadb
 import hashlib
+from rank_bm25 import BM25Okapi
 from .config import settings
 
 class EmbeddingProvider:
@@ -71,20 +72,51 @@ class BaseVectorStore:
 class ChromaVectorStore(BaseVectorStore):
     def __init__(self):
         self.client = None
-        self.collection = None
+        self._bm25_cache = {}
+
+    def _invalidate_bm25_cache(self, department_id: Optional[int]):
+        if department_id in self._bm25_cache:
+            del self._bm25_cache[department_id]
+        # Also invalidate global cache just in case
+        if "global" in self._bm25_cache:
+            del self._bm25_cache["global"]
+
+    def _get_bm25_index(self, collection, department_id: Optional[int]):
+        cache_key = department_id if department_id is not None else "global"
+        if cache_key not in self._bm25_cache:
+            all_docs = collection.get()
+            if not all_docs or not all_docs['documents']:
+                return None, []
+            
+            docs = all_docs['documents']
+            ids = all_docs['ids']
+            metadatas = all_docs['metadatas']
+            
+            tokenized_corpus = [doc.lower().split(" ") for doc in docs]
+            bm25 = BM25Okapi(tokenized_corpus)
+            
+            items = [{"id": ids[i], "document": docs[i], "metadata": metadatas[i]} for i in range(len(docs))]
+            self._bm25_cache[cache_key] = (bm25, items)
+            
+        return self._bm25_cache[cache_key]
 
     def _init_client(self):
         if self.client is None:
             os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
             self.client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
-            self.collection = self.client.get_or_create_collection(
-                name="processpilot_chunks"
-            )
+
+    def _get_collection(self, department_id: Optional[int]):
+        self._init_client()
+        coll_name = f"dept_{department_id}" if department_id is not None else "global_docs"
+        return self.client.get_or_create_collection(name=coll_name)
 
     def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]], api_key: Optional[str] = None, llm_provider: str = "simulation"):
-        self._init_client()
-        provider = EmbeddingProvider(api_key, llm_provider)
+        if not chunks: return
+        # Extract department_id from the first chunk's metadata
+        department_id = chunks[0].get('metadata', {}).get('department_id')
+        collection = self._get_collection(department_id)
         
+        provider = EmbeddingProvider(api_key, llm_provider)
         ids = []
         documents = []
         embeddings = []
@@ -98,55 +130,78 @@ class ChromaVectorStore(BaseVectorStore):
             documents.append(chunk_text)
             embeddings.append(provider.get_embedding(chunk_text))
             
-            # Enrich metadata
             meta = chunk.get('metadata', {})
-            meta.update({
-                "document_id": document_id,
-                "chunk_index": chunk['index']
-            })
+            meta.update({"document_id": document_id, "chunk_index": chunk['index']})
             metadatas.append(meta)
             
-        self.collection.add(
-            ids=ids,
-            documents=documents,
-            embeddings=embeddings,
-            metadatas=metadatas
-        )
+        collection.add(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
+        self._invalidate_bm25_cache(department_id)
 
     def search(self, query: str, limit: int = 5, department_id: Optional[int] = None, api_key: Optional[str] = None, llm_provider: str = "simulation") -> List[Dict[str, Any]]:
-        self._init_client()
+        collection = self._get_collection(department_id)
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)
-        
-        where_filter = None
-        if department_id is not None:
-            where_filter = {"department_id": department_id}
             
-        results = self.collection.query(
+        results = collection.query(
             query_embeddings=[query_embedding],
-            n_results=limit,
-            where=where_filter
+            n_results=limit
         )
         
         formatted_results = []
-        if not results or not results['documents']:
+        if results and results['documents'] and results['documents'][0]:
+            for i in range(len(results['ids'][0])):
+                formatted_results.append({
+                    "id": results['ids'][0][i],
+                    "document": results['documents'][0][i],
+                    "metadata": results['metadatas'][0][i],
+                    "distance": results['distances'][0][i] if 'distances' in results and results['distances'] else 0.0
+                })
+                
+        # --- BM25 Keyword Search ---
+        bm25, items = self._get_bm25_index(collection, department_id)
+        keyword_results = []
+        if bm25:
+            tokenized_query = query.lower().split(" ")
+            bm25_scores = bm25.get_scores(tokenized_query)
+            # Get top 'limit' matches
+            top_n = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:limit]
+            for idx in top_n:
+                if bm25_scores[idx] > 0:
+                    keyword_results.append(items[idx])
+                    
+        # --- Reciprocal Rank Fusion ---
+        if not formatted_results and not keyword_results:
             return []
             
-        for i in range(len(results['ids'][0])):
-            formatted_results.append({
-                "id": results['ids'][0][i],
-                "document": results['documents'][0][i],
-                "metadata": results['metadatas'][0][i],
-                "distance": results['distances'][0][i] if 'distances' in results else 0.0
-            })
+        scores = {}
+        fused_items = {}
+        
+        for rank, res in enumerate(formatted_results):
+            doc_id = res['id']
+            if doc_id not in scores:
+                scores[doc_id] = 0
+                fused_items[doc_id] = res
+            scores[doc_id] += 1.0 / (60 + rank)
             
-        return formatted_results
+        for rank, res in enumerate(keyword_results):
+            doc_id = res['id']
+            if doc_id not in scores:
+                scores[doc_id] = 0
+                fused_items[doc_id] = res
+            scores[doc_id] += 1.0 / (60 + rank)
+            
+        sorted_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        return [fused_items[doc_id] for doc_id, score in sorted_docs][:limit]
 
     def delete_document_chunks(self, document_id: int):
         self._init_client()
-        self.collection.delete(
-            where={"document_id": document_id}
-        )
+        # To delete without department_id, we just try to delete from all collections
+        for collection in self.client.list_collections():
+            try:
+                collection.delete(where={"document_id": document_id})
+            except Exception:
+                pass
+        self._bm25_cache = {} # Invalidate all on delete to be safe
 
 class PineconeVectorStore(BaseVectorStore):
     def __init__(self):

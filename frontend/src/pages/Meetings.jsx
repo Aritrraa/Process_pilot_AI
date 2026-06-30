@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import DOMPurify from 'dompurify';
 import { api } from '../api';
-import { Plus, ChevronDown, ChevronRight, Calendar, Clock, Users, FileText, Link as LinkIcon } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, ChevronLeft, Calendar, Clock, Users, FileText, Link as LinkIcon } from 'lucide-react';
 
 function renderInline(text) {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  if (!text) return null;
+  // Sanitize to prevent XSS
+  const clean = DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+  const parts = clean.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>;
     if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ background: 'var(--bg-overlay)', padding: '1px 5px', borderRadius: 3, fontSize: '0.9em', fontFamily: 'monospace', color: 'var(--color-info)' }}>{part.slice(1, -1)}</code>;
@@ -47,8 +52,9 @@ function renderMarkdown(text) {
 }
 
 export default function Meetings() {
-  const [meetings, setMeetings] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const PAGE_SIZE = 20;
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState('');
   const [transcript, setTranscript] = useState('');
@@ -57,10 +63,11 @@ export default function Meetings() {
   const [creating, setCreating] = useState(false);
   const [expanded, setExpanded] = useState(null);
 
-  const load = () => api.getMeetings().then(setMeetings).catch(() => {}).finally(() => setLoading(false));
-  useEffect(() => {
-    load();
-  }, []);
+  const { data: meetings = [], isLoading: loading } = useQuery({
+    queryKey: ['meetings', page],
+    queryFn: () => api.getMeetings(page * PAGE_SIZE, PAGE_SIZE),
+    keepPreviousData: true,
+  });
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -75,7 +82,7 @@ export default function Meetings() {
         inputMode === 'link' ? meetingLink : null
       );
       setTitle(''); setTranscript(''); setMeetingLink(''); setShowForm(false);
-      load();
+      queryClient.invalidateQueries({ queryKey: ['meetings'] });
     } catch (err) {
       alert(err.message);
     } finally {
@@ -285,6 +292,20 @@ CTO: Perfect. Action items summary: Sarah - DR plan by Friday. Engineering Lead 
         </div>
       );
     })()}
+    {/* Pagination */}
+    <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+        Page {page + 1}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn btn-ghost btn-sm" disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))}>
+          <ChevronLeft size={14} /> Previous
+        </button>
+        <button className="btn btn-ghost btn-sm" disabled={meetings.length < PAGE_SIZE} onClick={() => setPage(p => p + 1)}>
+          Next <ChevronRight size={14} />
+        </button>
+      </div>
+    </div>
     </div>
   );
 }

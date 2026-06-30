@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom';
-import { Send, Zap, ChevronDown, ChevronRight, Cpu, FileText, AlertCircle } from 'lucide-react';
+import { Send, Zap, ChevronDown, ChevronRight, Cpu, FileText, AlertCircle, Trash2 } from 'lucide-react';
 
 const suggestions = [
   "What is the incident response procedure for P1 outages?",
@@ -49,8 +50,10 @@ function renderMarkdown(text) {
 }
 
 function renderInline(text) {
-  // Handle bold **text** and `code`
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  if (!text) return null;
+  // Sanitize input to prevent XSS — strip all HTML tags
+  const clean = DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+  const parts = clean.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>;
     if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ background: 'var(--bg-overlay)', padding: '1px 5px', borderRadius: 3, fontSize: '0.9em', fontFamily: 'monospace', color: 'var(--color-info)' }}>{part.slice(1, -1)}</code>;
@@ -108,22 +111,77 @@ export default function Chat() {
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: msg }]);
     setLoading(true);
+    
+    // Add an empty AI message placeholder
+    setMessages(prev => [...prev, {
+      role: 'ai',
+      content: '',
+      sources: [],
+      incidents: [],
+      steps: [],
+      showSteps: false,
+    }]);
+
     try {
-      const res = await api.chat(msg, activeScope);
-      setMessages(prev => [...prev, {
-        role: 'ai',
-        content: res.answer,
-        sources: res.sources || [],
-        incidents: res.incidents || [],
-        steps: res.steps || [],
-        showSteps: false,
-      }]);
+      const token = localStorage.getItem('token');
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+      const res = await fetch(`${baseUrl}/chat/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ message: msg, scope: activeScope, stream: true })
+      });
+
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+      
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        const chunkStr = decoder.decode(value, { stream: true });
+        const lines = chunkStr.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (!dataStr) continue;
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.type === 'metadata') {
+                setMessages(prev => {
+                  const newMsgs = [...prev];
+                  newMsgs[newMsgs.length - 1].sources = data.sources || [];
+                  newMsgs[newMsgs.length - 1].incidents = data.incidents || [];
+                  newMsgs[newMsgs.length - 1].steps = data.steps || [];
+                  return newMsgs;
+                });
+              } else if (data.type === 'chunk') {
+                setMessages(prev => {
+                  const newMsgs = [...prev];
+                  newMsgs[newMsgs.length - 1].content += data.content;
+                  return newMsgs;
+                });
+              } else if (data.type === 'done') {
+                // Done
+              }
+            } catch (e) {
+              console.warn("Error parsing chunk", dataStr);
+            }
+          }
+        }
+      }
     } catch (err) {
-      setMessages(prev => [...prev, {
-        role: 'ai',
-        content: `**Error:** ${err.message}. Please check that the backend server is running.`,
-        sources: [], steps: [], isError: true
-      }]);
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        newMsgs[newMsgs.length - 1].content = `**Error:** ${err.message}. Please check that the backend server is running.`;
+        newMsgs[newMsgs.length - 1].isError = true;
+        return newMsgs;
+      });
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -149,6 +207,16 @@ export default function Chat() {
           <span className={`badge ${activeProvider === 'simulation' ? 'badge-neutral' : 'badge-green'}`}>
             <Cpu size={9} /> {providerLabels[activeProvider]}
           </span>
+          {messages.length > 0 && (
+            <button
+              className="btn btn-ghost btn-xs"
+              onClick={() => { setMessages([]); localStorage.removeItem(`chat_history_${user?.id}`); }}
+              title="Clear chat history"
+              style={{ color: 'var(--color-danger)', padding: '4px 8px' }}
+            >
+              <Trash2 size={12} /> Clear
+            </button>
+          )}
         </div>
       </div>
 

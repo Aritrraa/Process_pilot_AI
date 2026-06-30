@@ -20,3 +20,4 @@ alembic==1.18.4
 psycopg2-binary==2.9.9
 email-validator==2.1.1
 pinecone-client==3.2.2
+rank-bm25>=0.2.2
