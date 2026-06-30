@@ -130,8 +130,8 @@ body, p, input, select, textarea, button, .btn {
 @media (max-width: 768px) {
   .main-content {
     margin-left: 0;
-    padding: 60px 24px; /* 60px mobile padding */
-    padding-top: 100px;
+    padding: 60px 16px; /* 60px mobile padding */
+    padding-top: 80px; /* Leave space for top mobile header */
     max-width: 100vw;
     border-left: none;
   }
@@ -143,9 +143,50 @@ body, p, input, select, textarea, button, .btn {
   width: var(--sidebar-width); height: 100vh;
   background: var(--bg-secondary);
   display: flex; flex-direction: column;
-  z-index: 100;
+  z-index: 1000;
   color: var(--text-primary);
   border-right: 1px solid var(--border-default);
+  transition: transform 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    transform: translateX(-100%);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+}
+
+.mobile-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 999;
+  backdrop-filter: blur(2px);
+}
+.mobile-overlay.open {
+  display: block;
+}
+
+.mobile-header {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 60px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-default);
+  z-index: 900;
+  align-items: center;
+  padding: 0 16px;
+  justify-content: space-between;
+}
+
+@media (max-width: 768px) {
+  .mobile-header {
+    display: flex;
+  }
 }
 
 .sidebar-brand {
@@ -981,6 +1022,9 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
   .auth-left {
     display: none;
   }
+  .auth-right {
+    padding: 20px;
+  }
 }
 
 /* ===== ADDITIONAL POLISHED INSTITUTIONAL STYLES ===== */
@@ -1601,7 +1645,7 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
   }
 
   /* Make tables responsive */
-  .table-wrap {
+  .table-wrap, .table-responsive {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }

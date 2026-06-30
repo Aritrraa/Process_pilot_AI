@@ -40,6 +40,11 @@ export default function Sidebar() {
         <div style={{ width: 34 }} /> {/* Balance spacer to align title center */}
       </div>
 
+      <div 
+        className={`mobile-overlay ${open ? 'open' : ''}`} 
+        onClick={() => setOpen(false)}
+      />
+
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         {/* Brand */}
         <div className="sidebar-brand">

@@ -70,7 +70,7 @@ export default function Dashboard() {
               {health >= 70 ? 'Good' : health >= 40 ? 'Fair' : 'Needs Work'}
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
             <div className="health-ring">
               <svg width="100" height="100" viewBox="0 0 100 100">
                 <circle className="circle-bg" cx="50" cy="50" r="40" fill="none" />
