@@ -19,16 +19,27 @@ export default function Login() {
 
   if (user) return <Navigate to="/dashboard" replace />;
 
+  const [coldBootMsg, setColdBootMsg] = useState('');
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setColdBootMsg('');
     setLoading(true);
+    
+    // If request takes > 4 seconds, show cold boot message
+    const timer = setTimeout(() => {
+      setColdBootMsg('Waking up the secure server. This may take up to 60 seconds on the free tier...');
+    }, 4000);
+
     try {
       await login(email, password);
     } catch (err) {
       setError(err.message);
     } finally {
+      clearTimeout(timer);
       setLoading(false);
+      setColdBootMsg('');
     }
   };
 
@@ -110,6 +121,13 @@ export default function Login() {
                 required
               />
             </div>
+            
+            {coldBootMsg && (
+              <div style={{ padding: '12px 16px', background: 'var(--color-info-subtle)', color: 'var(--color-info)', borderRadius: '4px', fontSize: 12, marginBottom: 20, borderLeft: '3px solid var(--color-info)' }}>
+                {coldBootMsg}
+              </div>
+            )}
+            
             <button
               className="btn btn-primary w-full"
               type="submit"
