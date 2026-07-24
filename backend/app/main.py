@@ -16,9 +16,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("processpilot")
 
-# Create all database tables on startup
-Base.metadata.create_all(bind=engine)
+from sqlalchemy import text
 
+# Create all database tables on startup
+is_postgres = "postgresql" in settings.DATABASE_URL or "postgres" in settings.DATABASE_URL
+if is_postgres:
+    # Ensure pgvector extension is enabled before creating tables
+    with engine.begin() as conn:
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+
+Base.metadata.create_all(bind=engine)
 class DynamicCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         origin = request.headers.get("Origin")

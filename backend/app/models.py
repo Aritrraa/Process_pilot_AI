@@ -1,6 +1,7 @@
 import datetime
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Float, JSON
 from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 from .database import Base
 
 class Department(Base):
@@ -206,4 +207,17 @@ class AIFailure(Base):
     feedback_type = Column(String) # 'thumbs_down', 'hallucination', etc.
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+class DocumentEmbedding(Base):
+    """PostgreSQL native pgvector storage for document chunks."""
+    __tablename__ = "document_embeddings"
+    
+    id = Column(String, primary_key=True) # doc_{id}_chunk_{idx}
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="CASCADE"), nullable=True, index=True)
+    chunk_index = Column(Integer)
+    text = Column(Text)
+    embedding = Column(Vector(768)) # 768 dimensions for both Gemini and OpenAI embeddings
+    metadata_json = Column(JSON, default={})
+
 

@@ -362,14 +362,103 @@ class QdrantVectorStore(BaseVectorStore):
                 )
             )
 
+class PGVectorStore(BaseVectorStore):
+    """Native PostgreSQL vector store using pgvector via SQLAlchemy."""
+    def __init__(self):
+        from .database import SessionLocal
+        self.SessionLocal = SessionLocal
+
+    def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]], api_key: Optional[str] = None, llm_provider: str = "simulation"):
+        if not chunks: return
+        from .models import DocumentEmbedding
+        provider = EmbeddingProvider(api_key, llm_provider)
+        
+        department_id = chunks[0].get('metadata', {}).get('department_id')
+
+        db = self.SessionLocal()
+        try:
+            for chunk in chunks:
+                chunk_text = chunk['text']
+                chunk_id = f"doc_{document_id}_chunk_{chunk['index']}"
+                emb = provider.get_embedding(chunk_text)
+                
+                meta = chunk.get('metadata', {})
+                
+                doc_emb = DocumentEmbedding(
+                    id=chunk_id,
+                    document_id=document_id,
+                    department_id=department_id,
+                    chunk_index=chunk['index'],
+                    text=chunk_text,
+                    embedding=emb,
+                    metadata_json=meta
+                )
+                db.merge(doc_emb)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"Failed to save pgvector embeddings: {e}")
+            raise
+        finally:
+            db.close()
+
+    def search(self, query: str, limit: int = 5, department_id: Optional[int] = None, api_key: Optional[str] = None, llm_provider: str = "simulation") -> List[Dict[str, Any]]:
+        from .models import DocumentEmbedding
+        provider = EmbeddingProvider(api_key, llm_provider)
+        query_embedding = provider.get_embedding(query)
+        
+        db = self.SessionLocal()
+        try:
+            # Query using pgvector cosine distance operator (<=>)
+            q = db.query(DocumentEmbedding).order_by(
+                DocumentEmbedding.embedding.cosine_distance(query_embedding)
+            )
+            
+            if department_id is not None:
+                q = q.filter(DocumentEmbedding.department_id == department_id)
+                
+            results = q.limit(limit).all()
+            
+            formatted_results = []
+            for r in results:
+                # Calculate approximate cosine similarity from distance
+                # cosine_distance = 1 - cosine_similarity
+                distance = r.embedding.cosine_distance(query_embedding) if hasattr(r.embedding, 'cosine_distance') else 0.0
+                
+                formatted_results.append({
+                    "id": r.id,
+                    "document": r.text,
+                    "metadata": r.metadata_json,
+                    "distance": distance
+                })
+            return formatted_results
+        finally:
+            db.close()
+
+    def delete_document_chunks(self, document_id: int):
+        from .models import DocumentEmbedding
+        db = self.SessionLocal()
+        try:
+            db.query(DocumentEmbedding).filter(DocumentEmbedding.document_id == document_id).delete()
+            db.commit()
+        finally:
+            db.close()
+
 class VectorStoreManager:
     def __init__(self):
         self.store = None
+        
+        # Check if we are running in Postgres mode
+        is_postgres = "postgresql" in settings.DATABASE_URL or "postgres" in settings.DATABASE_URL
+        
         db_type = settings.VECTOR_DB_TYPE.lower()
         if db_type == "pinecone" and settings.PINECONE_API_KEY:
             self.store = PineconeVectorStore()
         elif db_type == "qdrant" and settings.QDRANT_URL:
             self.store = QdrantVectorStore()
+        elif is_postgres:
+            # Native PostgreSQL vector store using pgvector!
+            self.store = PGVectorStore()
             
         if not self.store:
             if db_type in ("pinecone", "qdrant"):
