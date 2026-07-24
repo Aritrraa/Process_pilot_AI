@@ -98,6 +98,29 @@ We addressed the missing volume sequence and styled the Sandbox Simulator to loo
 - **Volume Sequence Alignment**:
   - Re-ordered the sections physically so that the metrics and benchmarks are introduced as **Volume II** right after Volume I.
   - Renumbered the **Multi-Agent Sandbox** to **Volume III**, the **Ingestion Timeline** to **Volume IV**, the **Travel Diary Extracts** to **Volume V**, the **Register Journal** to **Volume VI**, and the **Chapters Accordion** to **Volume VII**.
+
+---
+
+## 8. Phase 9 Architecture Finalization & Production Security
+
+We executed two major production architectural upgrades to prepare ProcessPilot AI for cloud production hosting on **Vercel** and **Render** backed by **Supabase**:
+
+### 1. Ephemeral Storage Elimination (Supabase `pgvector` Migration)
+- **Problem**: Render's ephemeral filesystem wipes SQLite files (`processpilot.db`) and local `chroma_db` vector directories on container restart.
+- **Solution**: Migrated vector storage to native **PostgreSQL `pgvector`** extension running inside Supabase.
+- **Implementation**:
+  - Created `DocumentEmbedding` model using `pgvector.sqlalchemy.Vector(768)` in `models.py`.
+  - Added `PGVectorStore` in `vectorstore.py` using cosine distance query operators (`<=>`).
+  - Added startup handler in `main.py` to auto-execute `CREATE EXTENSION IF NOT EXISTS vector;`.
+  - Automatically activates when `DATABASE_URL` contains `postgresql://`.
+
+### 2. Synchronous Event Loop Vulnerability Resolution
+- **Problem**: Long LLM completion calls in `def` routes blocked the main thread pool, causing HTTP request timeouts and server freezes under concurrent load.
+- **Solution**: Refactored the entire AI agent orchestration layer to use non-blocking `async/await` syntax.
+- **Implementation**:
+  - Upgraded `LLMClient` in `llm_client.py` to use `AsyncGroq`, `AsyncOpenAI`, and `generate_content_async`.
+  - Refactored `CEOAgent`, `SOPAgent`, and `ComparisonAgent` to `async def` execution workflows.
+  - Converted `/chat` endpoints in `routes/chat.py` to `async def` returning true non-blocking Server-Sent Events (SSE).
   - Updated the top navigation menu coordinates to map: `I. Entering`, `II. Utilities`, `III. Board` (`#analytics`), `IV. Swarm` (`#simulator`), and `V. Chapters`.
 - **Volume III Sandbox Styling**:
   - Fully styled the **Multi-Agent Sandbox** with theme variables, adding white paper cards (`#FFFFFF`) with thin gray borders (`--tea-border`), HSL query-select list indices, and bamboo line connections between agents.
