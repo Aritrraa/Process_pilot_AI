@@ -204,7 +204,7 @@ class CEOAgent:
         history_chunks.reverse()
         return "\n".join(history_chunks)
 
-    def process_query(self, user: User, query: str, db: Session, scope: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def process_query(self, user: User, query: str, db: Session, scope: Optional[List[str]] = None) -> Dict[str, Any]:
         # Initialize or retrieve user session for agent loop tracking
         if user.id not in ACTIVE_AGENT_SESSIONS:
             ACTIVE_AGENT_SESSIONS[user.id] = {
@@ -443,7 +443,7 @@ class CEOAgent:
                         f"[Task Ticket: {t.title}]\n"
                         f"Description: {t.description or 'No description'}\n"
                         f"Status: {t.status}\n"
-                        f"Created At: {t.created_at.strftime('%Y-%m-%d')}"
+                        f"Created At: {t.created_at.strftime("%Y-%m-%d")}"
                     )
             
             # Deduplicate sources
@@ -467,8 +467,8 @@ class CEOAgent:
             # Run Comparison Agent if necessary
             comparison_needed = any(word in query.lower() for word in ["compare", "difference", "differences", "versus", " vs "])
             comparison_results = ""
-            if comparison_needed:
-                comparison_results = self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
+            if intent == "comparison":
+                comparison_results = await self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
             
             # Construct full context
             context_chunks = [res["document"] for res in search_results]
@@ -486,15 +486,15 @@ class CEOAgent:
                 {"agent": "IncidentAgent", "action": "Searched database ticket logs", "result": f"Found {len(incident_results)} tasks/tickets"},
                 {"agent": "GraphAgent", "action": "Queried local knowledge graph (Graph-RAG)", "result": f"Retrieved {len(graph_results)} connected entities"}
             ]
-            if comparison_needed:
+            if intent == "comparison":
                 steps.append({"agent": "ComparisonAgent", "action": "Compared documents", "result": "Generated comparison report"})
         
         # Step 6: Query LLM (or fallback) for final response
         sop_needed = "sop" in query.lower() or "procedure" in query.lower() or "how to" in query.lower()
         
-        if sop_needed:
+        if intent == "sop":
             steps.append({"agent": "SOPAgent", "action": f"Generating structured markdown procedure using {llm_provider}", "result": "Success"})
-            answer = self.sop_agent.execute(query, context_chunks, api_key, llm_provider, system_prompt)
+            answer = await self.sop_agent.execute(query, context_chunks, api_key, llm_provider, system_prompt)
         else:
             from ..analytics import get_system_analytics
             analytics_data = get_system_analytics(db, user)
@@ -613,7 +613,7 @@ class CEOAgent:
                     )
                 steps.append({"agent": "CEOAgent", "action": "Synthesized response (Simulation)", "result": "Success"})
             else:
-                answer = llm_client.call(
+                answer = await llm_client.call(
                     provider=llm_provider,
                     api_key=api_key,
                     system_prompt=system_prompt,
@@ -650,7 +650,7 @@ class CEOAgent:
             "steps": steps
         }
 
-    def process_query_stream(self, user: User, query: str, db: Session, scope: Optional[List[str]] = None):
+    async def process_query_stream(self, user: User, query: str, db: Session, scope: Optional[List[str]] = None):
         """
         Stream the LLM response as Server-Sent Events (SSE).
         Re-uses the context gathering from the normal pipeline, but streams the LLM completion.
@@ -688,14 +688,13 @@ class CEOAgent:
         if graph_results:
             steps.append({"agent": "GraphAgent", "action": "Queried organizational knowledge graph", "result": "Success"})
         
-        comparison_needed = any(word in query.lower() for word in ["compare", "difference", "differences", "versus", " vs "])
         comparison_results = ""
-        if comparison_needed:
-            comparison_results = self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
+        if intent == "comparison":
+            comparison_results = await self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
             steps.append({"agent": "ComparisonAgent", "action": "Executed document comparison", "result": "Success"})
             
         context_chunks = [res["document"] for res in search_results]
-        if comparison_needed and comparison_results:
+        if intent == "comparison" and comparison_results:
             context_chunks.append(f"[Document Comparison Report]\n{comparison_results}")
 
         sources = list(set([res["metadata"].get("file_name", "Unknown File") for res in search_results]))
@@ -752,7 +751,7 @@ class CEOAgent:
 
         # Stream LLM tokens
         full_answer = ""
-        for chunk in llm_client.stream(
+        async for chunk in llm_client.stream(
             provider=llm_provider, 
             api_key=api_key, 
             system_prompt=system_prompt or "You are an Enterprise AI.", 

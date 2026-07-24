@@ -82,7 +82,7 @@ class LLMClient:
         limit = self.get_context_limit(provider)
         return total_tokens < limit * threshold
     
-    def call(
+    async def call(
         self,
         provider: str,
         api_key: str,
@@ -96,6 +96,7 @@ class LLMClient:
         Make an LLM call with exponential backoff retry.
         Supports: gemini, openai, groq, simulation.
         """
+        import asyncio
         if provider == "simulation" or not api_key:
             return self._simulate(user_message)
 
@@ -113,7 +114,7 @@ class LLMClient:
         last_error = None
         for attempt in range(max_retries):
             try:
-                result = self._dispatch(provider, api_key, system_prompt, user_message)
+                result = await self._dispatch(provider, api_key, system_prompt, user_message)
                 self._consecutive_failures = 0
                 self._circuit_open = False
 
@@ -162,7 +163,7 @@ class LLMClient:
                         f"LLM call attempt {attempt + 1}/{max_retries} failed ({provider}): {e}. "
                         f"Retrying in {wait_time}s..."
                     )
-                    time.sleep(wait_time)
+                    await asyncio.sleep(wait_time)
                 else:
                     logger.error(f"LLM call failed after {max_retries} attempts ({provider}): {e}")
         
@@ -174,7 +175,7 @@ class LLMClient:
         
         return f"Error: LLM call failed after {max_retries} attempts. Last error: {str(last_error)}"
     
-    def stream(
+    async def stream(
         self,
         provider: str,
         api_key: str,
@@ -183,26 +184,27 @@ class LLMClient:
         max_retries: int = 3,
         db: Optional[Session] = None,
         user_id: Optional[int] = None,
-    ) -> Generator[str, None, None]:
+    ):
         """
         Stream an LLM call with exponential backoff retry for the initial connection.
-        Yields text chunks.
+        Yields text chunks asynchronously.
         """
+        import asyncio
         if provider == "simulation" or not api_key:
-            yield from self._simulate_stream(user_message)
+            for c in self._simulate_stream(user_message): yield c
             return
         
         # Circuit breaker check
         if self._circuit_open and self._consecutive_failures >= 5:
             logger.warning("Circuit breaker OPEN: using simulation fallback for streaming")
-            yield from self._simulate_stream(user_message)
+            for c in self._simulate_stream(user_message): yield c
             return
         
         last_error = None
         for attempt in range(max_retries):
             try:
                 full_text = ""
-                for chunk in self._dispatch_stream(provider, api_key, system_prompt, user_message):
+                async for chunk in self._dispatch_stream(provider, api_key, system_prompt, user_message):
                     full_text += chunk
                     yield chunk
                     
@@ -247,7 +249,7 @@ class LLMClient:
                         f"LLM stream attempt {attempt + 1}/{max_retries} failed ({provider}): {e}. "
                         f"Retrying in {wait_time}s..."
                     )
-                    time.sleep(wait_time)
+                    await asyncio.sleep(wait_time)
                 else:
                     logger.error(f"LLM stream failed after {max_retries} attempts ({provider}): {e}")
         
@@ -255,33 +257,33 @@ class LLMClient:
         if self._consecutive_failures >= 5:
             self._circuit_open = True
             logger.warning("Circuit breaker ACTIVATED: falling back to simulation mode")
-            yield from self._simulate_stream(user_message)
+            for c in self._simulate_stream(user_message): yield c
             return
             
         yield f"\n\n[Error: LLM call failed after {max_retries} attempts. Last error: {str(last_error)}]"
     
-    def _dispatch(self, provider: str, api_key: str, system_prompt: str, user_message: str) -> str:
+    async def _dispatch(self, provider: str, api_key: str, system_prompt: str, user_message: str) -> str:
         """Dispatch to the appropriate LLM provider."""
         if provider == "gemini":
-            return self._call_gemini(api_key, system_prompt, user_message)
+            return await self._call_gemini(api_key, system_prompt, user_message)
         elif provider == "openai":
-            return self._call_openai(api_key, system_prompt, user_message)
+            return await self._call_openai(api_key, system_prompt, user_message)
         elif provider == "groq":
-            return self._call_groq(api_key, system_prompt, user_message)
+            return await self._call_groq(api_key, system_prompt, user_message)
         else:
             return self._simulate(user_message)
     
-    def _call_gemini(self, api_key: str, system_prompt: str, user_message: str) -> str:
+    async def _call_gemini(self, api_key: str, system_prompt: str, user_message: str) -> str:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=system_prompt)
-        response = model.generate_content(user_message)
+        response = await model.generate_content_async(user_message)
         return response.text
     
-    def _call_openai(self, api_key: str, system_prompt: str, user_message: str) -> str:
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
+    async def _call_openai(self, api_key: str, system_prompt: str, user_message: str) -> str:
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=api_key)
+        response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -291,11 +293,11 @@ class LLMClient:
         )
         return response.choices[0].message.content
     
-    def _call_groq(self, api_key: str, system_prompt: str, user_message: str) -> str:
-        from groq import Groq
-        client = Groq(api_key=api_key)
+    async def _call_groq(self, api_key: str, system_prompt: str, user_message: str) -> str:
+        from groq import AsyncGroq
+        client = AsyncGroq(api_key=api_key)
         model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -305,29 +307,29 @@ class LLMClient:
         )
         return response.choices[0].message.content
     
-    def _dispatch_stream(self, provider: str, api_key: str, system_prompt: str, user_message: str):
+    async def _dispatch_stream(self, provider: str, api_key: str, system_prompt: str, user_message: str):
         if provider == "gemini":
-            yield from self._stream_gemini(api_key, system_prompt, user_message)
+            async for chunk in self._stream_gemini(api_key, system_prompt, user_message): yield chunk
         elif provider == "openai":
-            yield from self._stream_openai(api_key, system_prompt, user_message)
+            async for chunk in self._stream_openai(api_key, system_prompt, user_message): yield chunk
         elif provider == "groq":
-            yield from self._stream_groq(api_key, system_prompt, user_message)
+            async for chunk in self._stream_groq(api_key, system_prompt, user_message): yield chunk
         else:
-            yield from self._simulate_stream(user_message)
+            for chunk in self._simulate_stream(user_message): yield chunk
 
-    def _stream_gemini(self, api_key: str, system_prompt: str, user_message: str):
+    async def _stream_gemini(self, api_key: str, system_prompt: str, user_message: str):
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=system_prompt)
-        response = model.generate_content(user_message, stream=True)
-        for chunk in response:
+        response = await model.generate_content_async(user_message, stream=True)
+        async for chunk in response:
             if chunk.text:
                 yield chunk.text
 
-    def _stream_openai(self, api_key: str, system_prompt: str, user_message: str):
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
+    async def _stream_openai(self, api_key: str, system_prompt: str, user_message: str):
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=api_key)
+        response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -336,15 +338,15 @@ class LLMClient:
             max_tokens=2048,
             stream=True
         )
-        for chunk in response:
+        async for chunk in response:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
-    def _stream_groq(self, api_key: str, system_prompt: str, user_message: str):
-        from groq import Groq
-        client = Groq(api_key=api_key)
+    async def _stream_groq(self, api_key: str, system_prompt: str, user_message: str):
+        from groq import AsyncGroq
+        client = AsyncGroq(api_key=api_key)
         model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -353,7 +355,7 @@ class LLMClient:
             max_tokens=2048,
             stream=True
         )
-        for chunk in response:
+        async for chunk in response:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
     

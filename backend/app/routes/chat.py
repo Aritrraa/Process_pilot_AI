@@ -22,7 +22,7 @@ class FeedbackPayload(BaseModel):
 
 
 @router.post("/")
-def chat_with_ai(
+async def chat_with_ai(
     query: ChatQuery,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -35,7 +35,7 @@ def chat_with_ai(
             ceo_agent.process_query_stream(current_user, query.message, db, scope=query.scope),
             media_type="text/event-stream"
         )
-    return ceo_agent.process_query(current_user, query.message, db, scope=query.scope)
+    return await ceo_agent.process_query(current_user, query.message, db, scope=query.scope)
 
 
 @router.post("/feedback")

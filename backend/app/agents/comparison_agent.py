@@ -11,7 +11,7 @@ class ComparisonAgent(BaseAgent):
     Agent responsible for comparing multiple documents or policies and highlighting differences.
     """
     
-    def execute(self, query: str, user: User, db: Session, **kwargs) -> str:
+    async def execute(self, query: str, user: User, db: Session, **kwargs) -> str:
         api_key = kwargs.get("api_key")
         llm_provider = kwargs.get("llm_provider", "simulation")
         
@@ -53,7 +53,7 @@ class ComparisonAgent(BaseAgent):
         
         # 4. Generate the response
         system_prompt = "You are an expert Enterprise Document Analyst."
-        return llm_client.call(
+        return await llm_client.call(
             provider=llm_provider,
             api_key=api_key,
             system_prompt=system_prompt,
