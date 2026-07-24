@@ -178,3 +178,29 @@ class ConversationMessage(Base):
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class PromptVersion(Base):
+    """Stores versioned system prompts for A/B testing and easy updates."""
+    __tablename__ = "prompt_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_name = Column(String, index=True, default="CEOAgent")
+    version = Column(Integer, default=1)
+    is_active = Column(Integer, default=1) # 1 for active, 0 for inactive
+    system_prompt = Column(Text)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+
+class AIFailure(Base):
+    """Logs human-in-the-loop negative feedback for AI responses."""
+    __tablename__ = "ai_failures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    query = Column(Text)
+    response = Column(Text)
+    feedback_type = Column(String) # 'thumbs_down', 'hallucination', etc.
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+

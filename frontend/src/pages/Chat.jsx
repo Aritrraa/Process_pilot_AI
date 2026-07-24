@@ -3,7 +3,7 @@ import DOMPurify from 'dompurify';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from 'react-router-dom';
-import { Send, Zap, ChevronDown, ChevronRight, Cpu, FileText, AlertCircle, Trash2 } from 'lucide-react';
+import { Send, Zap, ChevronDown, ChevronRight, Cpu, FileText, AlertCircle, Trash2, ThumbsUp, ThumbsDown } from 'lucide-react';
 
 const suggestions = [
   "What is the incident response procedure for P1 outages?",
@@ -192,6 +192,29 @@ export default function Chat() {
     setMessages(prev => prev.map((m, i) => i === idx ? { ...m, showSteps: !m.showSteps } : m));
   };
 
+  const sendFeedback = async (msg, feedbackType) => {
+    // Find the preceding user message (the query for this AI response)
+    const msgIndex = messages.findIndex(m => m === msg);
+    const userMsg = messages.slice(0, msgIndex).reverse().find(m => m.role === 'user');
+    try {
+      const token = localStorage.getItem('token');
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+      await fetch(`${baseUrl}/chat/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({
+          query: userMsg?.content || '',
+          response: msg.content,
+          feedback_type: feedbackType,
+        }),
+      });
+      // Mark this message as having received feedback
+      setMessages(prev => prev.map((m) => m === msg ? { ...m, feedback: feedbackType } : m));
+    } catch (err) {
+      console.error('Failed to submit feedback', err);
+    }
+  };
+
   const activeProvider = settings?.llm_provider || 'simulation';
   const providerLabels = { gemini: 'Gemini AI', groq: 'Groq Llama-3', openai: 'OpenAI GPT', simulation: 'Simulation' };
 
@@ -316,6 +339,37 @@ export default function Chat() {
                         </div>
                       )}
                     </>
+                  )}
+                  {/* HITL Feedback Buttons — only for completed AI messages */}
+                  {msg.role === 'ai' && msg.content && !msg.isError && (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
+                      {msg.feedback ? (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                          {msg.feedback === 'thumbs_up' ? '✓ Marked as helpful' : '✓ Feedback recorded'}
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => sendFeedback(msg, 'thumbs_up')}
+                            title="This was helpful"
+                            style={{ background: 'none', border: '1px solid var(--border-default)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', transition: 'all 0.15s' }}
+                            onMouseOver={e => e.currentTarget.style.borderColor = 'var(--color-success)'}
+                            onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+                          >
+                            <ThumbsUp size={11} /> Helpful
+                          </button>
+                          <button
+                            onClick={() => sendFeedback(msg, 'thumbs_down')}
+                            title="This was not helpful"
+                            style={{ background: 'none', border: '1px solid var(--border-default)', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', transition: 'all 0.15s' }}
+                            onMouseOver={e => e.currentTarget.style.borderColor = 'var(--color-danger)'}
+                            onMouseOut={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+                          >
+                            <ThumbsDown size={11} /> Not helpful
+                          </button>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

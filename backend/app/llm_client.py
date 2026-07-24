@@ -38,6 +38,33 @@ class LLMClient:
         }
         self._consecutive_failures = 0
         self._circuit_open = False
+        # In-memory exact-match response cache {(provider, prompt_hash): response}
+        self._response_cache: dict = {}
+
+    # ===== SEMANTIC ROUTER =====
+    # Simple queries (short length, greetings) → cheap fast model
+    # Complex queries (long, analytical) → powerful model
+    _CHEAP_MODEL = "llama-3.1-8b-instant"   # ~8x cheaper
+    _POWER_MODEL = "llama-3.3-70b-versatile" # full power
+    _SIMPLE_KEYWORDS = {"hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "bye", "good morning", "good evening"}
+
+    def _route_model(self, user_message: str) -> str:
+        """Semantic router: classify query complexity and return optimal model name."""
+        msg = user_message.strip().lower()
+        word_count = len(msg.split())
+        # Short greeting → cheap model
+        if word_count <= 5 or msg in self._SIMPLE_KEYWORDS:
+            logger.info(f"[SemanticRouter] Short/simple query → routing to {self._CHEAP_MODEL}")
+            return self._CHEAP_MODEL
+        # Long / complex query → powerful model
+        logger.info(f"[SemanticRouter] Complex query ({word_count} words) → routing to {self._POWER_MODEL}")
+        return self._POWER_MODEL
+
+    def _cache_key(self, provider: str, system_prompt: str, user_message: str) -> str:
+        """Create a deterministic cache key for a query."""
+        import hashlib
+        raw = f"{provider}::{system_prompt[:200]}::{user_message}"
+        return hashlib.sha256(raw.encode()).hexdigest()
     
     def estimate_tokens(self, text: str) -> int:
         """Rough token estimation: ~1.3 tokens per word."""
@@ -71,18 +98,31 @@ class LLMClient:
         """
         if provider == "simulation" or not api_key:
             return self._simulate(user_message)
-        
+
+        # ===== EXACT-MATCH CACHE CHECK =====
+        cache_key = self._cache_key(provider, system_prompt, user_message)
+        if cache_key in self._response_cache:
+            logger.info("[Cache] HIT — returning cached LLM response")
+            return self._response_cache[cache_key]
+
         # Circuit breaker check
         if self._circuit_open and self._consecutive_failures >= 5:
             logger.warning("Circuit breaker OPEN: using simulation fallback")
             return self._simulate(user_message)
-        
+
         last_error = None
         for attempt in range(max_retries):
             try:
                 result = self._dispatch(provider, api_key, system_prompt, user_message)
                 self._consecutive_failures = 0
                 self._circuit_open = False
+
+                # Store in cache
+                self._response_cache[cache_key] = result
+                # Evict oldest if cache grows beyond 200 entries
+                if len(self._response_cache) > 200:
+                    oldest_key = next(iter(self._response_cache))
+                    del self._response_cache[oldest_key]
                 
                 # Track usage
                 input_tokens = self.estimate_tokens(system_prompt + user_message)
@@ -254,8 +294,9 @@ class LLMClient:
     def _call_groq(self, api_key: str, system_prompt: str, user_message: str) -> str:
         from groq import Groq
         client = Groq(api_key=api_key)
+        model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
@@ -302,8 +343,9 @@ class LLMClient:
     def _stream_groq(self, api_key: str, system_prompt: str, user_message: str):
         from groq import Groq
         client = Groq(api_key=api_key)
+        model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}

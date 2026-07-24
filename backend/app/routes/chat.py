@@ -1,15 +1,25 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
 import json
 
 from ..database import get_db
-from ..models import User
+from ..models import User, AIFailure
 from ..schemas import ChatQuery
 from ..auth import get_current_user
 from ..agents import ceo_agent
 
 router = APIRouter(prefix="/chat", tags=["AI Chat"])
+
+
+class FeedbackPayload(BaseModel):
+    query: str
+    response: str
+    feedback_type: str  # 'thumbs_up' or 'thumbs_down'
+    notes: Optional[str] = None
+
 
 @router.post("/")
 def chat_with_ai(
@@ -26,3 +36,31 @@ def chat_with_ai(
             media_type="text/event-stream"
         )
     return ceo_agent.process_query(current_user, query.message, db, scope=query.scope)
+
+
+@router.post("/feedback")
+def submit_feedback(
+    payload: FeedbackPayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Human-in-the-Loop (HITL) endpoint.
+    Logs thumbs up/down feedback on AI responses for weekly review.
+    Only thumbs_down entries are persisted to the ai_failures table.
+    """
+    if payload.feedback_type == "thumbs_down":
+        failure = AIFailure(
+            user_id=current_user.id,
+            query=payload.query,
+            response=payload.response,
+            feedback_type=payload.feedback_type,
+            notes=payload.notes,
+        )
+        db.add(failure)
+        db.commit()
+        return {"status": "logged", "message": "Feedback recorded. Thank you — this helps us improve!"}
+
+    # thumbs_up — acknowledge but don't store
+    return {"status": "ok", "message": "Great! Glad the response was helpful."}
+

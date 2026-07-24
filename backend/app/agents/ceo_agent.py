@@ -4,7 +4,7 @@ import json
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 
-from ..models import User, Document, DocumentChunk, Meeting, Task, Memory, AgentLog, UserSetting
+from ..models import User, Document, DocumentChunk, Meeting, Task, Memory, AgentLog, UserSetting, PromptVersion
 
 from .search_agent import SearchAgent
 from .incident_agent import IncidentAgent
@@ -26,6 +26,29 @@ class CEOAgent:
         self.memory_agent = MemoryAgent()
         self.graph_agent = GraphAgent()
         self.comparison_agent = ComparisonAgent()
+
+    # ===== PROMPT VERSIONING =====
+    _DEFAULT_SYSTEM_PROMPT = (
+        "You are ProcessPilot AI, an Enterprise Operations Copilot. "
+        "Synthesize an answer for the user query using the retrieved knowledge, "
+        "incident tickets, past memories, organizational directory, system/team analytics, "
+        "and the user's specific assigned task list."
+    )
+
+    def _get_active_prompt(self, db: Session, agent_name: str = "CEOAgent") -> str:
+        """Load the active versioned prompt from the database, falling back to the default."""
+        try:
+            pv = (
+                db.query(PromptVersion)
+                .filter(PromptVersion.agent_name == agent_name, PromptVersion.is_active == 1)
+                .order_by(PromptVersion.version.desc())
+                .first()
+            )
+            if pv:
+                return pv.system_prompt
+        except Exception:
+            pass
+        return self._DEFAULT_SYSTEM_PROMPT
 
     def _get_org_directory(self, db: Session, user: User) -> str:
         all_users = db.query(User).all()
