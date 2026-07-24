@@ -91,10 +91,11 @@ export const api = {
       body: JSON.stringify({ title, description, assigned_to: assignedTo, document_id: documentId, meeting_id: meetingId }) 
     }).then(handleResponse),
 
-  updateTask: (id, status = null, assignedTo = null) => {
+  updateTask: (id, status = null, assignedTo = null, title = null) => {
     const body = {};
     if (status !== null) body.status = status;
     if (assignedTo !== null) body.assigned_to = assignedTo;
+    if (title !== null) body.title = title;
     return fetch(`${BASE_URL}/tasks/${id}`, { 
       method: 'PATCH', 
       headers: getHeaders(), 
@@ -113,6 +114,12 @@ export const api = {
   getAnalytics: () =>
     fetch(`${BASE_URL}/analytics/`, { headers: getHeaders() }).then(handleResponse),
 
+  getAIFailures: () =>
+    fetch(`${BASE_URL}/analytics/ai-failures`, { headers: getHeaders() }).then(handleResponse),
+
+  exportSyntheticDataset: () =>
+    fetch(`${BASE_URL}/analytics/synthetic-export`, { headers: getHeaders() }).then(handleResponse),
+
   // Knowledge Graph
   getGraphStats: () =>
     fetch(`${BASE_URL}/knowledge-graph/stats`, { headers: getHeaders() }).then(handleResponse),
@@ -127,3 +134,4 @@ export const api = {
       body: JSON.stringify({ successor_id: successorId })
     }).then(handleResponse),
 };
+

@@ -8,6 +8,8 @@ export default function Analytics() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [managers, setManagers] = useState([]);
+  const [aiFailures, setAiFailures] = useState([]);
+  const [activeTab, setActiveTab] = useState('overview');
   const [expandedMembers, setExpandedMembers] = useState({});
 
   const toggleExpandMember = (memberId) => {
@@ -81,6 +83,7 @@ export default function Analytics() {
     api.getAnalytics().then(setData).catch(() => {}).finally(() => setLoading(false));
     if (user && (user.role === 'Manager' || user.role === 'Admin')) {
       api.getManagers().then(setManagers).catch(() => {});
+      api.getAIFailures().then(setAiFailures).catch(() => {});
     }
   };
 
@@ -97,6 +100,21 @@ export default function Analytics() {
       api.getAnalytics().then(setData).catch(() => {});
     } catch (err) {
       alert(`Failed to ${action} employee: ${err.message}`);
+    }
+  };
+
+  const handleExportSynthetic = async () => {
+    try {
+      const result = await api.exportSyntheticDataset();
+      const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `synthetic_dataset_${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Export failed: ${err.message}`);
     }
   };
 
@@ -167,7 +185,26 @@ export default function Analytics() {
         </button>
       </div>
 
-      {/* Stats */}
+      {(isAdmin || isManager) && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 10 }}>
+          <button
+            onClick={() => setActiveTab('overview')}
+            style={{ background: 'none', border: 'none', color: activeTab === 'overview' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: activeTab === 'overview' ? 600 : 400, cursor: 'pointer', padding: '4px 8px' }}
+          >
+            Dashboard Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('failures')}
+            style={{ background: 'none', border: 'none', color: activeTab === 'failures' ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: activeTab === 'failures' ? 600 : 400, cursor: 'pointer', padding: '4px 8px' }}
+          >
+            AI Failures (HITL)
+          </button>
+        </div>
+      )}
+
+      {activeTab === 'overview' && (
+        <>
+          {/* Stats */}
       <div className="stats-grid">
         {statCards.map(s => (
           <div key={s.label} className="stat-card">
@@ -178,10 +215,57 @@ export default function Analytics() {
             <div className="stat-value" style={{ fontSize: 24 }}>{s.value}</div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
+      
+      {activeTab === 'failures' && (
+        <div className="card">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="card-title">Human-in-the-Loop Feedback Review</div>
+            {isAdmin && (
+              <button className="btn btn-primary btn-sm" onClick={handleExportSynthetic}>
+                Export Synthetic Dataset
+              </button>
+            )}
+          </div>
+          {aiFailures.length === 0 ? (
+            <div className="empty-state">No AI failures logged yet.</div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Feedback Type</th>
+                    <th>Query</th>
+                    <th>Response</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aiFailures.map(f => (
+                    <tr key={f.id}>
+                      <td style={{ whiteSpace: 'nowrap' }}>{new Date(f.created_at).toLocaleDateString()}</td>
+                      <td>
+                        <span className="badge" style={{ background: f.feedback_type === 'thumbs_down' ? 'var(--color-danger)' : 'var(--color-gold)' }}>
+                          {f.feedback_type.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.query}>{f.query}</td>
+                      <td style={{ maxWidth: 300, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.response}>{f.response}</td>
+                      <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{f.notes || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
-      <div className="grid-2" style={{ marginBottom: 16 }}>
-        {/* Doc types */}
+      {activeTab === 'overview' && (
+        <div className="grid-2" style={{ marginBottom: 16 }}>
+          {/* Doc types */}
         <div className="card">
           <div className="card-header">
             <div className="card-title"><BarChart3 size={15} /> Documents by Type</div>
@@ -744,7 +828,7 @@ export default function Analytics() {
               </div>
             </form>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
