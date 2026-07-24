@@ -237,7 +237,8 @@ def create_meeting(
             status="Pending",
             meeting_id=meeting.id,
             assigned_to=current_user.id,
-            manager_id=task_manager_id
+            manager_id=task_manager_id,
+            ai_generated_title=title,  # Data flywheel: remember original AI title
         )
         db.add(new_task)
     db.commit()

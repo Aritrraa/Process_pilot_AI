@@ -94,6 +94,9 @@ class Task(Base):
     manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
     meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)
+    # Data flywheel: store the original AI-generated title so we can detect
+    # when managers edit it (implicit feedback for fine-tuning datasets)
+    ai_generated_title = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     document = relationship("Document", back_populates="tasks")

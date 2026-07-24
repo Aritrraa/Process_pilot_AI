@@ -3,11 +3,15 @@ from sqlalchemy.orm import Session
 from typing import List
 import json
 import asyncio
+import logging
+
+logger = logging.getLogger("processpilot.tasks")
+
 
 from .ws import manager
 
 from ..database import get_db
-from ..models import User, Task
+from ..models import User, Task, AIFailure
 from ..schemas import TaskCreate, TaskUpdate, TaskResponse
 from ..auth import get_current_user
 
@@ -119,6 +123,29 @@ def update_task_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # ===== DATA FLYWHEEL: Implicit Feedback =====
+    # If the user changes the title AND there was an AI-generated original,
+    # log it as training signal — the manager implicitly told us the AI's title was wrong.
+    if task_update.title is not None and task.ai_generated_title:
+        if task_update.title.strip() != task.ai_generated_title.strip():
+            try:
+                flywheel_log = AIFailure(
+                    user_id=current_user.id,
+                    query=f"[Task Title Generation] Meeting-generated task",
+                    response=task.ai_generated_title,
+                    feedback_type="implicit_title_edit",
+                    notes=f"Manager edited AI title to: '{task_update.title}'"
+                )
+                db.add(flywheel_log)
+                logger.info(
+                    f"[DataFlywheel] Title edit detected: "
+                    f"'{task.ai_generated_title}' → '{task_update.title}'"
+                )
+            except Exception:
+                pass  # Non-critical
+
+    if task_update.title is not None:
+        task.title = task_update.title
     if task_update.status is not None:
         task.status = task_update.status
         

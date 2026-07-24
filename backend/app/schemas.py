@@ -120,6 +120,7 @@ class TaskCreate(BaseModel):
     meeting_id: Optional[int] = None
 
 class TaskUpdate(BaseModel):
+    title: Optional[str] = None  # Data flywheel: track if manager edits AI-generated title
     status: Optional[Literal["Pending", "In_Progress", "Completed"]] = None
     assigned_to: Optional[int] = None
 

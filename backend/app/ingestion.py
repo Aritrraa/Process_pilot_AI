@@ -4,7 +4,10 @@ Supports PDF, DOCX, TXT, CSV, and Markdown files.
 """
 import os
 import re
+import logging
 from typing import List, Dict, Any
+
+logger = logging.getLogger("processpilot.ingestion")
 
 # Optional imports with safe fallbacks
 try:
@@ -48,13 +51,21 @@ def extract_text_from_txt(file_path: str) -> str:
         return f"[Text file reading error]: {str(e)}"
 
 def extract_content(file_path: str, file_type: str) -> str:
+    """Extract text from a document and automatically redact PII before returning."""
+    from .pii_redactor import redact_document  # lazy import to avoid circular deps
     ext = file_type.lower()
     if ext == "pdf":
-        return extract_text_from_pdf(file_path)
+        raw_text = extract_text_from_pdf(file_path)
     elif ext in ["docx", "doc"]:
-        return extract_text_from_docx(file_path)
+        raw_text = extract_text_from_docx(file_path)
     else:
-        return extract_text_from_txt(file_path)
+        raw_text = extract_text_from_txt(file_path)
+
+    # PII Redaction Gate — strip PII before any data hits ChromaDB or LLM
+    redacted_text, count = redact_document(raw_text)
+    if count > 0:
+        logger.info(f"[Ingestion] PII redacted {count} entities from '{file_path}'")
+    return redacted_text
 
 
 def chunk_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> List[str]:
