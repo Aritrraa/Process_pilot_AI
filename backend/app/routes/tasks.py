@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from typing import List
 import json
 import asyncio
 import logging
 
 logger = logging.getLogger("processpilot.tasks")
-
 
 from .ws import manager
 
@@ -18,20 +18,21 @@ from ..auth import get_current_user
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 @router.post("/", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-def create_task(
+async def create_task(
     task_in: TaskCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     assigned_to = task_in.assigned_to if task_in.assigned_to is not None else current_user.id
     
     # Check if assignee exists
-    assignee = db.query(User).filter(User.id == assigned_to).first()
+    result = await db.execute(select(User).filter(User.id == assigned_to))
+    assignee = result.scalars().first()
     if not assignee:
         raise HTTPException(status_code=404, detail="Assignee user not found")
         
     # Check permissions: Managers can only assign to themselves or their subordinates.
-    if current_user.role == "Manager":
+    if current_user.role in ("Manager", "Director"):
         if assigned_to != current_user.id and assignee.manager_id != current_user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -45,6 +46,8 @@ def create_task(
             )
 
     task_manager_id = assignee.manager_id if assignee.role == "Employee" else assignee.id
+    assignee_name = assignee.full_name or assignee.email if assignee else None
+
     task = Task(
         title=task_in.title,
         description=task_in.description,
@@ -55,10 +58,9 @@ def create_task(
         status="Pending"
     )
     db.add(task)
-    db.commit()
-    db.refresh(task)
+    await db.commit()
+    await db.refresh(task)
     
-    assignee_name = assignee.full_name or assignee.email
     return {
         "id": task.id,
         "title": task.title,
@@ -73,30 +75,37 @@ def create_task(
     }
 
 @router.get("/", response_model=List[TaskResponse])
-def list_tasks(
+async def list_tasks(
     skip: int = 0,
     limit: int = 50,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     if current_user.role == "Admin":
-        tasks = db.query(Task).offset(skip).limit(limit).all()
-    elif current_user.role == "Manager":
-        # Managers see their own tasks + tasks of their subordinates matching their manager ID context
-        subordinate_ids = [u.id for u in db.query(User).filter(User.manager_id == current_user.id).all()]
-        tasks = db.query(Task).filter(
-            (Task.assigned_to == current_user.id) | 
-            ((Task.assigned_to.in_(subordinate_ids)) & (Task.manager_id == current_user.id))
-        ).offset(skip).limit(limit).all()
+        result = await db.execute(select(Task).offset(skip).limit(limit))
+        tasks = result.scalars().all()
+    elif current_user.role in ("Manager", "Director"):
+        sub_result = await db.execute(select(User).filter(User.manager_id == current_user.id))
+        subordinate_ids = [u.id for u in sub_result.scalars().all()]
+        result = await db.execute(
+            select(Task).filter(
+                (Task.assigned_to == current_user.id) |
+                ((Task.assigned_to.in_(subordinate_ids)) & (Task.manager_id == current_user.id))
+            ).offset(skip).limit(limit)
+        )
+        tasks = result.scalars().all()
     else:
-        # Employees see tasks assigned to them under their active manager context (or public/none)
-        tasks = db.query(Task).filter(
-            (Task.assigned_to == current_user.id) & 
-            ((Task.manager_id == current_user.manager_id) | (Task.manager_id == None))
-        ).offset(skip).limit(limit).all()
+        result = await db.execute(
+            select(Task).filter(
+                (Task.assigned_to == current_user.id) &
+                ((Task.manager_id == current_user.manager_id) | (Task.manager_id == None))
+            ).offset(skip).limit(limit)
+        )
+        tasks = result.scalars().all()
 
     # Pre-fetch users for assignee_name mapping to avoid N+1 queries
-    users_dict = {u.id: (u.full_name or u.email) for u in db.query(User).all()}
+    users_result = await db.execute(select(User))
+    users_dict = {u.id: (u.full_name or u.email) for u in users_result.scalars().all()}
     
     res = []
     for t in tasks:
@@ -116,12 +125,19 @@ def list_tasks(
 
 from ..abac import verify_task_access
 
+@router.get("/{task_id}", response_model=TaskResponse)
+async def get_task(
+    task: Task = Depends(verify_task_access("read"))
+):
+    """Get a specific task by ID."""
+    return task
+
 @router.patch("/{task_id}", response_model=TaskResponse)
-def update_task_status(
+async def update_task_status(
     task_update: TaskUpdate,
     task: Task = Depends(verify_task_access("update")),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     # ===== DATA FLYWHEEL: Implicit Feedback =====
     # If the user changes the title AND there was an AI-generated original,
@@ -151,12 +167,13 @@ def update_task_status(
         
     if task_update.assigned_to is not None:
         # Verify the target user exists
-        new_assignee = db.query(User).filter(User.id == task_update.assigned_to).first()
+        result = await db.execute(select(User).filter(User.id == task_update.assigned_to))
+        new_assignee = result.scalars().first()
         if not new_assignee:
             raise HTTPException(status_code=404, detail="New assignee user not found")
             
         # Role-based assignment validation
-        if current_user.role == "Manager":
+        if current_user.role in ("Manager", "Director"):
             if task_update.assigned_to != current_user.id and new_assignee.manager_id != current_user.id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
@@ -174,10 +191,14 @@ def update_task_status(
         task.assigned_to = task_update.assigned_to
         task.manager_id = new_assignee.manager_id if new_assignee.role == "Employee" else new_assignee.id
 
-    db.commit()
-    db.refresh(task)
+    await db.commit()
+    await db.refresh(task)
     
-    assignee = db.query(User).filter(User.id == task.assigned_to).first() if task.assigned_to else None
+    if task.assigned_to:
+        a_result = await db.execute(select(User).filter(User.id == task.assigned_to))
+        assignee = a_result.scalars().first()
+    else:
+        assignee = None
     assignee_name = (assignee.full_name or assignee.email) if assignee else None
 
     # Broadcast notification to the manager and the assignee (if not the same)
@@ -213,10 +234,10 @@ def update_task_status(
     }
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task(
+async def delete_task(
     task: Task = Depends(verify_task_access("delete")),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
-    db.delete(task)
-    db.commit()
+    await db.delete(task)
+    await db.commit()
     return

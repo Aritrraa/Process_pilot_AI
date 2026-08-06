@@ -3,6 +3,8 @@ import datetime
 import json
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from ..models import User, Document, DocumentChunk, Meeting, Task, Memory, AgentLog, UserSetting, PromptVersion
 
@@ -35,23 +37,24 @@ class CEOAgent:
         "and the user's specific assigned task list."
     )
 
-    def _get_active_prompt(self, db: Session, agent_name: str = "CEOAgent") -> str:
+    async def _get_active_prompt(self, db: AsyncSession, agent_name: str = "CEOAgent") -> str:
         """Load the active versioned prompt from the database, falling back to the default."""
         try:
-            pv = (
-                db.query(PromptVersion)
+            r_pv = await db.execute(
+                select(PromptVersion)
                 .filter(PromptVersion.agent_name == agent_name, PromptVersion.is_active == 1)
                 .order_by(PromptVersion.version.desc())
-                .first()
             )
+            pv = r_pv.scalars().first()
             if pv:
                 return pv.system_prompt
         except Exception:
             pass
         return self._DEFAULT_SYSTEM_PROMPT
 
-    def _get_org_directory(self, db: Session, user: User) -> str:
-        all_users = db.query(User).all()
+    async def _get_org_directory(self, db: AsyncSession, user: User) -> str:
+        r_users = await db.execute(select(User))
+        all_users = r_users.scalars().all()
         user_map = {u.id: u for u in all_users}
         
         if user.role == "Admin":
@@ -84,13 +87,14 @@ class CEOAgent:
             )
         return "\n".join(lines)
 
-    def _handle_org_directory_query(self, query: str, user: User, db: Session) -> Optional[str]:
+    async def _handle_org_directory_query(self, query: str, user: User, db: AsyncSession) -> Optional[str]:
         q = query.lower()
         is_directory_query = any(x in q for x in ["manager", "report", "who is", "email", "contact", "phone", "details", "team", "reports to", "work under", "id details"])
         if not is_directory_query:
             return None
             
-        users = db.query(User).all()
+        r_users = await db.execute(select(User))
+        users = r_users.scalars().all()
         user_map = {u.id: u for u in users}
         
         # 1. Employee asks "who is the current hr manager"
@@ -173,8 +177,9 @@ class CEOAgent:
                         
         return None
 
-    def _build_conversation_history(self, db: Session, user: User, max_tokens: int = 2500) -> str:
-        logs = db.query(AgentLog).filter(AgentLog.user_id == user.id).order_by(AgentLog.id.desc()).limit(15).all()
+    async def _build_conversation_history(self, db: AsyncSession, user: User, max_tokens: int = 2500) -> str:
+        r_logs = await db.execute(select(AgentLog).filter(AgentLog.user_id == user.id).order_by(AgentLog.id.desc()).limit(15))
+        logs = r_logs.scalars().all()
         if not logs:
             return "No previous conversation history."
             
@@ -204,7 +209,7 @@ class CEOAgent:
         history_chunks.reverse()
         return "\n".join(history_chunks)
 
-    async def process_query(self, user: User, query: str, db: Session, scope: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def process_query(self, user: User, query: str, db: AsyncSession, scope: Optional[List[str]] = None) -> Dict[str, Any]:
         # Initialize or retrieve user session for agent loop tracking
         if user.id not in ACTIVE_AGENT_SESSIONS:
             ACTIVE_AGENT_SESSIONS[user.id] = {
@@ -228,7 +233,7 @@ class CEOAgent:
             }
 
         # Intercept directory/contact query to handle programmatically (RBAC enforced, 100% accurate, fast)
-        org_answer = self._handle_org_directory_query(query, user, db)
+        org_answer = await self._handle_org_directory_query(query, user, db)
         if org_answer:
             session["turns"] = 0
             steps = [
@@ -244,7 +249,7 @@ class CEOAgent:
                 agent_steps=steps
             )
             db.add(agent_log)
-            db.commit()
+            await db.commit()
             
             return {
                 "answer": org_answer,
@@ -271,7 +276,7 @@ class CEOAgent:
                             status="Pending"
                         )
                         db.add(new_task)
-                        db.commit()
+                        await db.commit()
                         db.refresh(new_task)
                         ans = (
                             f"✅ **Action Approved & Task Created Successfully!**\n"
@@ -297,7 +302,7 @@ class CEOAgent:
                 agent_steps=steps
             )
             db.add(agent_log)
-            db.commit()
+            await db.commit()
             return {"answer": ans, "sources": [], "incidents": [], "steps": steps}
 
         # Check for sensitive action that requires human-in-the-loop approval
@@ -310,7 +315,8 @@ class CEOAgent:
             
             # Simple keyword matching to find assignee name in directory
             try:
-                users = db.query(User).all()
+                r_users = await db.execute(select(User))
+                users = r_users.scalars().all()
                 for u in users:
                     if u.full_name and u.full_name.lower() in query.lower():
                         assigned_to = u.id
@@ -343,11 +349,12 @@ class CEOAgent:
                 agent_steps=steps
             )
             db.add(agent_log)
-            db.commit()
+            await db.commit()
             return {"answer": ans, "sources": [], "incidents": [], "steps": steps}
 
         # Step 1: Check settings for API keys and provider
-        settings_record = db.query(UserSetting).filter(UserSetting.user_id == user.id).first()
+        r_set = await db.execute(select(UserSetting).filter(UserSetting.user_id == user.id))
+        settings_record = r_set.scalars().first()
         system_prompt = settings_record.system_prompt if settings_record else None
         
         llm_provider = settings_record.llm_provider if settings_record else "simulation"
@@ -365,6 +372,15 @@ class CEOAgent:
         
         # Step 2: Retrieve long term memory for context
         user_memories = self.memory_agent.get_memories(user.id, query, db)
+
+        # Classify query intent (defined early so both scope and non-scope paths can use it)
+        _q = query.lower()
+        if any(w in _q for w in ["compare", "difference", "differences", "versus", " vs "]):
+            intent = "comparison"
+        elif any(w in _q for w in ["sop", "procedure", "how to", "step by step", "guide"]):
+            intent = "sop"
+        else:
+            intent = "general"
         
         # Step 3: Run Search Agent, Incident Agent, Graph Agent, or Scoped Filtering
         if scope:
@@ -389,7 +405,7 @@ class CEOAgent:
                     except: pass
                 elif s.startswith("tech_") or s.startswith("dept_") or s.startswith("user_"):
                     from ..knowledge_graph import knowledge_graph
-                    neighbors = knowledge_graph.get_neighbors(s)
+                    neighbors = knowledge_graph.get_neighbors(db, s)
                     for n in neighbors:
                         n_id = n["id"]
                         if n_id.startswith("doc_"):
@@ -409,16 +425,19 @@ class CEOAgent:
             
             # Fetch scoped documents
             if doc_ids:
-                docs = db.query(Document).filter(Document.id.in_(doc_ids)).all()
+                r_docs = await db.execute(select(Document).filter(Document.id.in_(doc_ids)))
+                docs = r_docs.scalars().all()
                 for d in docs:
                     sources.append(d.title)
-                    chunks = db.query(DocumentChunk).filter(DocumentChunk.document_id == d.id).all()
+                    r_chunks = await db.execute(select(DocumentChunk).filter(DocumentChunk.document_id == d.id))
+                    chunks = r_chunks.scalars().all()
                     for chunk in chunks:
                         context_chunks.append(f"[Document: {d.title}] {chunk.content}")
             
             # Fetch scoped meetings
             if meet_ids:
-                meets = db.query(Meeting).filter(Meeting.id.in_(meet_ids)).all()
+                r_meets = await db.execute(select(Meeting).filter(Meeting.id.in_(meet_ids)))
+                meets = r_meets.scalars().all()
                 for m in meets:
                     sources.append(f"Meeting: {m.title}")
                     context_chunks.append(
@@ -429,7 +448,8 @@ class CEOAgent:
             
             # Fetch scoped tasks
             if task_ids:
-                tasks = db.query(Task).filter(Task.id.in_(task_ids)).all()
+                r_tasks = await db.execute(select(Task).filter(Task.id.in_(task_ids)))
+                tasks = r_tasks.scalars().all()
                 for t in tasks:
                     sources.append(f"Task: {t.title}")
                     incident_results.append({
@@ -459,13 +479,15 @@ class CEOAgent:
             search_results = self.search_agent.execute(query, dept_id, api_key, llm_provider)
             
             # Run Incident Agent (DB metadata lookup)
-            incident_results = self.incident_agent.execute(query, db)
+            incident_results = await self.incident_agent.execute(query, db)
             
             # Run Graph Agent (Knowledge Graph Graph-RAG lookup)
-            graph_results = self.graph_agent.execute(query)
+            graph_results = await self.graph_agent.execute(query, db)
             
+            # Classify query intent: drives routing to SOP, Comparison, or standard Q&A paths
+            # (intent already computed above; block kept for inline documentation only)
+
             # Run Comparison Agent if necessary
-            comparison_needed = any(word in query.lower() for word in ["compare", "difference", "differences", "versus", " vs "])
             comparison_results = ""
             if intent == "comparison":
                 comparison_results = await self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
@@ -476,7 +498,7 @@ class CEOAgent:
             # Remove duplicate sources
             sources = list(set(sources))
             
-            if comparison_needed and comparison_results:
+            if intent == "comparison" and comparison_results:
                 context_chunks.append(f"[Document Comparison Report]\n{comparison_results}")
 
             # Assemble steps for agent logging
@@ -490,14 +512,12 @@ class CEOAgent:
                 steps.append({"agent": "ComparisonAgent", "action": "Compared documents", "result": "Generated comparison report"})
         
         # Step 6: Query LLM (or fallback) for final response
-        sop_needed = "sop" in query.lower() or "procedure" in query.lower() or "how to" in query.lower()
-        
         if intent == "sop":
             steps.append({"agent": "SOPAgent", "action": f"Generating structured markdown procedure using {llm_provider}", "result": "Success"})
             answer = await self.sop_agent.execute(query, context_chunks, api_key, llm_provider, system_prompt)
         else:
             from ..analytics import get_system_analytics
-            analytics_data = get_system_analytics(db, user)
+            analytics_data = await get_system_analytics(db, user)
             
             # Format analytics details nicely
             analytics_summary = []
@@ -515,10 +535,11 @@ class CEOAgent:
                     )
             analytics_info = "\n".join(analytics_summary)
 
-            directory_info = self._get_org_directory(db, user)
+            directory_info = await self._get_org_directory(db, user)
             
             # Query the database for the active user's assigned tasks list
-            user_tasks = db.query(Task).filter(Task.assigned_to == user.id).all()
+            r_t = await db.execute(select(Task).filter(Task.assigned_to == user.id))
+            user_tasks = r_t.scalars().all()
             user_tasks_summary = []
             if user_tasks:
                 user_tasks_summary.append("Your Current Assigned Tasks:")
@@ -530,7 +551,7 @@ class CEOAgent:
                 user_tasks_summary.append("You currently have no tasks assigned to you.")
             user_tasks_info = "\n".join(user_tasks_summary)
             
-            conversation_history = self._build_conversation_history(db, user)
+            conversation_history = await self._build_conversation_history(db, user)
 
             prompt = (
                 "You are ProcessPilot AI, an Enterprise Operations Copilot.\n"
@@ -637,7 +658,7 @@ class CEOAgent:
             agent_steps=steps
         )
         db.add(agent_log)
-        db.commit()
+        await db.commit()
         
         # Reset turns on successful completion of active query
         if user.id in ACTIVE_AGENT_SESSIONS:
@@ -650,7 +671,7 @@ class CEOAgent:
             "steps": steps
         }
 
-    async def process_query_stream(self, user: User, query: str, db: Session, scope: Optional[List[str]] = None):
+    async def process_query_stream(self, user: User, query: str, db: AsyncSession, scope: Optional[List[str]] = None):
         """
         Stream the LLM response as Server-Sent Events (SSE).
         Re-uses the context gathering from the normal pipeline, but streams the LLM completion.
@@ -659,7 +680,8 @@ class CEOAgent:
         from ..llm_client import llm_client
 
         # Get context (same as process_query but optimized for stream setup)
-        user_settings = db.query(UserSetting).filter(UserSetting.user_id == user.id).first()
+        r_us = await db.execute(select(UserSetting).filter(UserSetting.user_id == user.id))
+        user_settings = r_us.scalars().first()
         api_key = None
         llm_provider = "simulation"
         system_prompt = None
@@ -671,7 +693,9 @@ class CEOAgent:
             elif llm_provider == "groq": api_key = user_settings.groq_api_key
 
         # Memory
-        user_memories = "\n".join([f"- {m.key}: {m.value}" for m in db.query(Memory).filter(Memory.user_id == user.id).all()])
+        r_mem = await db.execute(select(Memory).filter(Memory.user_id == user.id))
+        memories = r_mem.scalars().all()
+        user_memories = "\n".join([f"- {m.key}: {m.value}" for m in memories])
         
         steps = []
         
@@ -680,14 +704,23 @@ class CEOAgent:
         search_results = self.search_agent.execute(query, dept_id, api_key, llm_provider)
         steps.append({"agent": "SearchAgent", "action": "Queried Vector DB for context", "result": "Success"})
         
-        incident_results = self.incident_agent.execute(query, db)
+        incident_results = await self.incident_agent.execute(query, db)
         if incident_results:
             steps.append({"agent": "IncidentAgent", "action": "Matched semantic incident tickets", "result": "Success"})
             
-        graph_results = self.graph_agent.execute(query)
+        graph_results = await self.graph_agent.execute(query, db)
         if graph_results:
             steps.append({"agent": "GraphAgent", "action": "Queried organizational knowledge graph", "result": "Success"})
         
+        # Classify query intent for streaming path
+        q_lower = query.lower()
+        if any(w in q_lower for w in ["compare", "difference", "differences", "versus", " vs "]):
+            intent = "comparison"
+        elif any(w in q_lower for w in ["sop", "procedure", "how to", "step by step", "guide"]):
+            intent = "sop"
+        else:
+            intent = "general"
+
         comparison_results = ""
         if intent == "comparison":
             comparison_results = await self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
@@ -700,19 +733,20 @@ class CEOAgent:
         sources = list(set([res["metadata"].get("file_name", "Unknown File") for res in search_results]))
         
         from ..analytics import get_system_analytics
-        analytics_data = get_system_analytics(db, user)
+        analytics_data = await get_system_analytics(db, user)
         analytics_summary = []
         analytics_summary.append("System & Team Analytics Overview:")
         analytics_summary.append(f"- Documentation Health Score: {analytics_data.get('documentation_health')}%")
         analytics_summary.append(f"- Task Status Distribution: {analytics_data.get('task_status')}")
         analytics_info = "\n".join(analytics_summary)
-        directory_info = self._get_org_directory(db, user)
+        directory_info = await self._get_org_directory(db, user)
         
-        user_tasks = db.query(Task).filter(Task.assigned_to == user.id).all()
+        r_t = await db.execute(select(Task).filter(Task.assigned_to == user.id))
+        user_tasks = r_t.scalars().all()
         user_tasks_summary = [f"- {t.title} [{t.status}]" for t in user_tasks] if user_tasks else ["No tasks"]
         user_tasks_info = "\n".join(user_tasks_summary)
         
-        conversation_history = self._build_conversation_history(db, user)
+        conversation_history = await self._build_conversation_history(db, user)
 
         sop_needed = "sop" in query.lower() or "procedure" in query.lower() or "how to" in query.lower()
         if sop_needed:
@@ -771,7 +805,7 @@ class CEOAgent:
             steps.append({"agent": "CEOAgent", "action": f"Synthesized response via {llm_provider}", "result": "Success"})
             agent_log = AgentLog(user_id=user.id, query=query, response=full_answer, agent_steps=steps)
             db.add(agent_log)
-            db.commit()
+            await db.commit()
         except Exception:
             pass
 

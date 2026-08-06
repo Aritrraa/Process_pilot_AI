@@ -5,9 +5,9 @@ from datetime import datetime
 # Auth Schemas
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(..., min_length=6, max_length=128)
     full_name: Optional[str] = None
-    role: Optional[Literal["Employee", "Manager"]] = "Employee"
+    role: Optional[Literal["Employee", "Manager", "Admin", "Director", "Contractor"]] = "Employee"
     department_id: Optional[int] = None
     manager_id: Optional[int] = None
 
@@ -47,15 +47,29 @@ class UserSettingsUpdate(BaseModel):
 class UserSettingsResponse(BaseModel):
     id: int
     user_id: int
-    gemini_api_key: Optional[str] = None
-    groq_api_key: Optional[str] = None
-    openai_api_key: Optional[str] = None
+    gemini_api_key_set: bool = False
+    groq_api_key_set: bool = False
+    openai_api_key_set: bool = False
     llm_provider: Optional[str] = "simulation"
     system_prompt: Optional[str] = None
     updated_at: datetime
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_settings(cls, setting):
+        """Create a response from a UserSetting model, masking API keys."""
+        return cls(
+            id=setting.id,
+            user_id=setting.user_id,
+            gemini_api_key_set=bool(setting.gemini_api_key and setting.gemini_api_key.strip()),
+            groq_api_key_set=bool(setting.groq_api_key and setting.groq_api_key.strip()),
+            openai_api_key_set=bool(setting.openai_api_key and setting.openai_api_key.strip()),
+            llm_provider=setting.llm_provider,
+            system_prompt=setting.system_prompt,
+            updated_at=setting.updated_at,
+        )
 
 # Department Schemas
 class DepartmentCreate(BaseModel):
@@ -78,6 +92,7 @@ class DocumentResponse(BaseModel):
     file_type: str
     department_id: Optional[int] = None
     uploaded_by: int
+    ingestion_status: str
     created_at: datetime
 
     class Config:
@@ -168,7 +183,7 @@ class MemoryResponse(BaseModel):
 
 # Query Schemas
 class ChatQuery(BaseModel):
-    message: str = Field(..., min_length=1, max_length=10000)
+    query: str = Field(..., min_length=1, max_length=10000)
     scope: Optional[List[str]] = None
     stream: bool = True
 

@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Float, JSON
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Float, JSON, Index
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from .database import Base
@@ -50,11 +50,15 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
-    file_path = Column(String)
+    file_path = Column(String)          # Local disk path (legacy / local dev fallback)
+    storage_path = Column(String, nullable=True)  # Supabase Storage object path
+    storage_url = Column(String, nullable=True)   # Supabase public URL for re-fetching
+    ingestion_status = Column(String, default="pending")  # pending | processing | done | failed
     file_type = Column(String) # PDF, DOCX, TXT, CSV, etc.
-    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
-    uploaded_by = Column(Integer, ForeignKey("users.id"))
+    department_id = Column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
+    uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
 
     department = relationship("Department", back_populates="documents")
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
@@ -79,8 +83,9 @@ class Meeting(Base):
     transcript = Column(Text)
     meeting_link = Column(String, nullable=True)
     summary = Column(Text, nullable=True)
-    uploaded_by = Column(Integer, ForeignKey("users.id"))
+    uploaded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
 
     tasks = relationship("Task", back_populates="meeting")
 
@@ -91,10 +96,10 @@ class Task(Base):
     title = Column(String, index=True)
     description = Column(Text, nullable=True)
     status = Column(String, default="Pending") # Pending, In_Progress, Completed
-    assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
-    manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
-    meeting_id = Column(Integer, ForeignKey("meetings.id"), nullable=True)
+    assigned_to = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    manager_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
+    meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="SET NULL"), nullable=True)
     # Data flywheel: store the original AI-generated title so we can detect
     # when managers edit it (implicit feedback for fine-tuning datasets)
     ai_generated_title = Column(String, nullable=True)
@@ -107,7 +112,7 @@ class AgentLog(Base):
     __tablename__ = "agent_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     query = Column(Text)
     response = Column(Text)
     agent_steps = Column(JSON, nullable=True) # Step-by-step logs of multi-agent flow
@@ -119,7 +124,7 @@ class Memory(Base):
     __tablename__ = "memories"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     key = Column(String, index=True)
     value = Column(Text)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
@@ -146,7 +151,7 @@ class LLMUsage(Base):
     __tablename__ = "llm_usage"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     provider = Column(String)  # gemini, openai, groq, simulation
     model_name = Column(String, nullable=True)
     input_tokens = Column(Integer, default=0)
@@ -160,7 +165,7 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     title = Column(String, default="New Conversation")
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc),
@@ -201,7 +206,7 @@ class AIFailure(Base):
     __tablename__ = "ai_failures"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     query = Column(Text)
     response = Column(Text)
     feedback_type = Column(String) # 'thumbs_down', 'hallucination', etc.
@@ -218,6 +223,42 @@ class DocumentEmbedding(Base):
     chunk_index = Column(Integer)
     text = Column(Text)
     embedding = Column(Vector(768)) # 768 dimensions for both Gemini and OpenAI embeddings
-    metadata_json = Column(JSON, default={})
+    metadata_json = Column(JSON, default=dict)
+
+    __table_args__ = (
+        Index('document_embeddings_hnsw_idx', 'embedding',
+              postgresql_using='hnsw',
+              postgresql_with={'m': 16, 'ef_construction': 64},
+              postgresql_ops={'embedding': 'vector_cosine_ops'}),
+    )
+
+
+class KGNode(Base):
+    """Knowledge Graph node (entity) stored in PostgreSQL."""
+    __tablename__ = "kg_nodes"
+
+    id = Column(String, primary_key=True)  # e.g. "user_alice@co.com", "doc_42"
+    entity_type = Column(String, index=True)  # User, Document, Department, Technology
+    properties = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    # Relationships: outgoing and incoming edges
+    outgoing_edges = relationship("KGEdge", foreign_keys="KGEdge.source_id", back_populates="source_node", cascade="all, delete-orphan")
+    incoming_edges = relationship("KGEdge", foreign_keys="KGEdge.target_id", back_populates="target_node", cascade="all, delete-orphan")
+
+
+class KGEdge(Base):
+    """Knowledge Graph directed edge (relationship) stored in PostgreSQL."""
+    __tablename__ = "kg_edges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source_id = Column(String, ForeignKey("kg_nodes.id", ondelete="CASCADE"), index=True)
+    target_id = Column(String, ForeignKey("kg_nodes.id", ondelete="CASCADE"), index=True)
+    relationship_type = Column(String, index=True)  # member_of, reports_to, uploaded, belongs_to, covers
+    properties = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    source_node = relationship("KGNode", foreign_keys=[source_id], back_populates="outgoing_edges")
+    target_node = relationship("KGNode", foreign_keys=[target_id], back_populates="incoming_edges")
 
 

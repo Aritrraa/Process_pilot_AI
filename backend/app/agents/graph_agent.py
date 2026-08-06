@@ -1,8 +1,9 @@
 from typing import List, Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
 
 class GraphAgent:
-    def execute(self, query: str) -> List[Dict[str, Any]]:
-        # Query local NetworkX knowledge graph for entities and neighbors
+    async def execute(self, query: str, db: AsyncSession) -> List[Dict[str, Any]]:
+        # Query PostgreSQL knowledge graph for entities and neighbors
         from ..knowledge_graph import knowledge_graph
         
         # Simple extraction of keywords (cleaning punctuation)
@@ -13,33 +14,31 @@ class GraphAgent:
             return []
             
         results = []
-        # Search node IDs or properties
-        for node_id, data in knowledge_graph.graph.nodes(data=True):
-            node_type = data.get("type", "Unknown")
-            # If any keyword is in the node ID or properties
-            match = False
-            if any(kw in str(node_id).lower() for kw in keywords):
-                match = True
-            else:
-                for k, v in data.items():
-                    if any(kw in str(v).lower() for kw in keywords):
-                        match = True
-                        break
-                        
-            if match:
+        # Since we can't easily iterate all nodes in a large DB, we search by keyword
+        # or we just return nothing if search_entities doesn't yield anything
+        for kw in keywords:
+            # We search for the keyword in the ID
+            nodes = await knowledge_graph.search_entities(db, keyword=kw)
+            for n in nodes:
+                node_id = n["id"]
+                node_type = n.get("type", "Unknown")
+                
                 # Find connected neighbors/relationships
-                neighbors = knowledge_graph.get_neighbors(node_id)
+                neighbors = await knowledge_graph.get_neighbors(db, node_id)
                 results.append({
                     "entity_id": node_id,
                     "type": node_type,
-                    "properties": {k: v for k, v in data.items() if k != "type"},
+                    "properties": {k: v for k, v in n.items() if k not in ("id", "type")},
                     "connections": [
                         {
-                            "target": n["id"],
-                            "relationship": n["relationship"],
-                            "type": n.get("type", "Unknown"),
-                            "direction": n["direction"]
-                        } for n in neighbors[:4] # limit to 4 connected neighbors to avoid context explosion
+                            "target": neighbor["id"],
+                            "relationship": neighbor["relationship"],
+                            "type": neighbor.get("type", "Unknown"),
+                            "direction": neighbor["direction"]
+                        } for neighbor in neighbors[:4] # limit to 4 connected neighbors to avoid context explosion
                     ]
                 })
-        return results[:3] # Return top 3 matched entities
+                
+        # Deduplicate results by entity_id
+        unique_results = {r["entity_id"]: r for r in results}
+        return list(unique_results.values())[:3] # Return top 3 matched entities

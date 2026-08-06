@@ -1,11 +1,15 @@
 import os
+import logging
 import numpy as np
 import google.generativeai as genai
 from typing import List, Dict, Any, Optional
 import chromadb
 import hashlib
 from rank_bm25 import BM25Okapi
+from tenacity import retry, stop_after_attempt, wait_exponential
 from .config import settings
+
+logger = logging.getLogger("processpilot.vectorstore")
 
 class EmbeddingProvider:
     """
@@ -33,28 +37,34 @@ class EmbeddingProvider:
             
         if self.llm_provider == "openai":
             try:
-                from openai import OpenAI
-                client = OpenAI(api_key=self.api_key)
-                response = client.embeddings.create(
-                    input=[text],
-                    model="text-embedding-3-small",
-                    dimensions=768
-                )
-                return response.data[0].embedding
+                @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+                def _call_openai():
+                    from openai import OpenAI
+                    client = OpenAI(api_key=self.api_key)
+                    response = client.embeddings.create(
+                        input=[text],
+                        model="text-embedding-3-small",
+                        dimensions=768
+                    )
+                    return response.data[0].embedding
+                return _call_openai()
             except Exception as e:
-                print(f"OpenAI embedding failed, using local simulator fallback: {e}")
+                logger.warning(f"OpenAI embedding failed after retries, using local mock fallback: {e}")
                 return local_mock_embedding()
                 
         elif self.llm_provider == "gemini":
             try:
-                response = genai.embed_content(
-                    model="models/text-embedding-004",
-                    content=text,
-                    task_type="retrieval_document"
-                )
-                return response['embedding']
+                @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+                def _call_gemini():
+                    response = genai.embed_content(
+                        model="models/text-embedding-004",
+                        content=text,
+                        task_type="retrieval_document"
+                    )
+                    return response['embedding']
+                return _call_gemini()
             except Exception as e:
-                print(f"Gemini embedding failed, using local simulator fallback: {e}")
+                logger.warning(f"Gemini embedding failed after retries, using local mock fallback: {e}")
                 return local_mock_embedding()
         else:
             return local_mock_embedding()
@@ -117,24 +127,30 @@ class ChromaVectorStore(BaseVectorStore):
         collection = self._get_collection(department_id)
         
         provider = EmbeddingProvider(api_key, llm_provider)
-        ids = []
-        documents = []
-        embeddings = []
-        metadatas = []
         
-        for chunk in chunks:
-            chunk_text = chunk['text']
-            chunk_id = f"doc_{document_id}_chunk_{chunk['index']}"
+        # Batch writes in groups of 50 to prevent OOM on free-tier hosting
+        BATCH_SIZE = 50
+        for batch_start in range(0, len(chunks), BATCH_SIZE):
+            batch = chunks[batch_start:batch_start + BATCH_SIZE]
+            ids = []
+            documents = []
+            embeddings = []
+            metadatas = []
             
-            ids.append(chunk_id)
-            documents.append(chunk_text)
-            embeddings.append(provider.get_embedding(chunk_text))
-            
-            meta = chunk.get('metadata', {})
-            meta.update({"document_id": document_id, "chunk_index": chunk['index']})
-            metadatas.append(meta)
-            
-        collection.add(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
+            for chunk in batch:
+                chunk_text = chunk['text']
+                chunk_id = f"doc_{document_id}_chunk_{chunk['index']}"
+                
+                ids.append(chunk_id)
+                documents.append(chunk_text)
+                embeddings.append(provider.get_embedding(chunk_text))
+                
+                meta = chunk.get('metadata', {})
+                meta.update({"document_id": document_id, "chunk_index": chunk['index']})
+                metadatas.append(meta)
+                
+            collection.add(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
+        
         self._invalidate_bm25_cache(department_id)
 
     def search(self, query: str, limit: int = 5, department_id: Optional[int] = None, api_key: Optional[str] = None, llm_provider: str = "simulation") -> List[Dict[str, Any]]:

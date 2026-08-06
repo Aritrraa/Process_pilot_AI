@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from typing import List
 
 from ..database import get_db
@@ -11,36 +12,33 @@ from ..analytics import get_system_analytics
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 @router.get("/")
-def get_analytics(
+async def get_analytics(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Returns system-wide analytics for the dashboard.
     Available to all authenticated users (Admin gets full view).
     """
-    return get_system_analytics(db, current_user)
+    return await get_system_analytics(db, current_user)
 
 
 @router.get("/ai-failures")
-def get_ai_failures(
+async def get_ai_failures(
     skip: int = 0,
     limit: int = 100,
     current_user: User = Depends(check_role(["Admin", "Manager"])),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Human-in-the-Loop (HITL) Review Dashboard.
     Returns all logged AI failures (thumbs-down + implicit title edits).
     Admin and Manager only.
     """
-    failures = (
-        db.query(AIFailure)
-        .order_by(AIFailure.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
+    result = await db.execute(
+        select(AIFailure).order_by(AIFailure.created_at.desc()).offset(skip).limit(limit)
     )
+    failures = result.scalars().all()
     return [
         {
             "id": f.id,
@@ -56,10 +54,10 @@ def get_ai_failures(
 
 
 @router.get("/synthetic-export")
-def export_synthetic_dataset(
+async def export_synthetic_dataset(
     limit: int = 500,
     current_user: User = Depends(check_role(["Admin"])),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Synthetic Fine-Tuning Dataset Export.
@@ -67,20 +65,20 @@ def export_synthetic_dataset(
     in JSONL-ready format for fine-tuning smaller open-source models.
     Admin only.
     """
-    # Get all logged agent interactions that have both a query and response
-    logs = (
-        db.query(AgentLog)
+    logs_result = await db.execute(
+        select(AgentLog)
         .filter(AgentLog.query.isnot(None), AgentLog.response.isnot(None))
         .filter(AgentLog.response != "")
         .order_by(AgentLog.timestamp.desc())
         .limit(limit)
-        .all()
     )
+    logs = logs_result.scalars().all()
 
     # Get IDs of failed queries so we can exclude them
-    failed_queries = set(
-        f.query for f in db.query(AIFailure).filter(AIFailure.feedback_type == "thumbs_down").all()
+    failures_result = await db.execute(
+        select(AIFailure).filter(AIFailure.feedback_type == "thumbs_down")
     )
+    failed_queries = set(f.query for f in failures_result.scalars().all())
 
     # Build the dataset — exclude thumbs-down queries
     dataset = []
@@ -103,4 +101,3 @@ def export_synthetic_dataset(
         "description": "High-quality query-response pairs for fine-tuning. Thumbs-down responses are excluded.",
         "dataset": dataset
     })
-

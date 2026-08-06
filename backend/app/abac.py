@@ -1,10 +1,12 @@
 from fastapi import Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from .database import get_db
 from .models import User, Document, Task, Meeting
 from .auth import get_current_user
 
-def evaluate_policy(subject: User, resource_type: str, resource_obj: any, action: str, db: Session) -> bool:
+
+async def evaluate_policy(subject: User, resource_type: str, resource_obj: any, action: str, db: AsyncSession) -> bool:
     """
     Evaluates Attribute-Based Access Control (ABAC) policies.
     """
@@ -27,7 +29,8 @@ def evaluate_policy(subject: User, resource_type: str, resource_obj: any, action
             if subject.role == "Manager":
                 if doc.uploaded_by == subject.id:
                     return True
-                uploader = db.query(User).filter(User.id == doc.uploaded_by).first()
+                result = await db.execute(select(User).filter(User.id == doc.uploaded_by))
+                uploader = result.scalars().first()
                 return uploader and uploader.manager_id == subject.id
             return False
 
@@ -41,7 +44,8 @@ def evaluate_policy(subject: User, resource_type: str, resource_obj: any, action
             if subject.role == "Manager":
                 if task.assigned_to == subject.id:
                     return True
-                assignee = db.query(User).filter(User.id == task.assigned_to).first()
+                result = await db.execute(select(User).filter(User.id == task.assigned_to))
+                assignee = result.scalars().first()
                 return assignee and assignee.manager_id == subject.id
             return False
         elif action == "delete":
@@ -49,7 +53,8 @@ def evaluate_policy(subject: User, resource_type: str, resource_obj: any, action
             if subject.role == "Manager":
                 if task.assigned_to == subject.id:
                     return True
-                assignee = db.query(User).filter(User.id == task.assigned_to).first()
+                result = await db.execute(select(User).filter(User.id == task.assigned_to))
+                assignee = result.scalars().first()
                 return assignee and assignee.manager_id == subject.id
             return False
 
@@ -59,7 +64,8 @@ def evaluate_policy(subject: User, resource_type: str, resource_obj: any, action
             # Employees can read meetings created by themselves, teammates, or their manager
             if meeting.uploaded_by == subject.id:
                 return True
-            creator = db.query(User).filter(User.id == meeting.uploaded_by).first()
+            result = await db.execute(select(User).filter(User.id == meeting.uploaded_by))
+            creator = result.scalars().first()
             if not creator:
                 return False
             if subject.role == "Employee":
@@ -74,33 +80,37 @@ def evaluate_policy(subject: User, resource_type: str, resource_obj: any, action
 
     return False
 
+
 # FastAPI Dependency Factories
 def verify_document_access(action: str):
-    def dependency(document_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-        doc = db.query(Document).filter(Document.id == document_id).first()
+    async def dependency(document_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+        result = await db.execute(select(Document).filter(Document.id == document_id))
+        doc = result.scalars().first()
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
-        if not evaluate_policy(subject=current_user, resource_type="document", resource_obj=doc, action=action, db=db):
+        if not await evaluate_policy(subject=current_user, resource_type="document", resource_obj=doc, action=action, db=db):
             raise HTTPException(status_code=403, detail=f"Permission denied: cannot {action} this document")
         return doc
     return dependency
 
 def verify_task_access(action: str):
-    def dependency(task_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-        task = db.query(Task).filter(Task.id == task_id).first()
+    async def dependency(task_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+        result = await db.execute(select(Task).filter(Task.id == task_id))
+        task = result.scalars().first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        if not evaluate_policy(subject=current_user, resource_type="task", resource_obj=task, action=action, db=db):
+        if not await evaluate_policy(subject=current_user, resource_type="task", resource_obj=task, action=action, db=db):
             raise HTTPException(status_code=403, detail=f"Permission denied: cannot {action} this task")
         return task
     return dependency
 
 def verify_meeting_access(action: str):
-    def dependency(meeting_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-        meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    async def dependency(meeting_id: int, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+        result = await db.execute(select(Meeting).filter(Meeting.id == meeting_id))
+        meeting = result.scalars().first()
         if not meeting:
             raise HTTPException(status_code=404, detail="Meeting not found")
-        if not evaluate_policy(subject=current_user, resource_type="meeting", resource_obj=meeting, action=action, db=db):
+        if not await evaluate_policy(subject=current_user, resource_type="meeting", resource_obj=meeting, action=action, db=db):
             raise HTTPException(status_code=403, detail=f"Permission denied: cannot {action} this meeting")
         return meeting
     return dependency

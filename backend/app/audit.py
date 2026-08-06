@@ -4,13 +4,14 @@ Free-tier compatible: stores in SQLite/PostgreSQL, no external services.
 """
 import logging
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 logger = logging.getLogger("processpilot.audit")
 
 
-def log_action(
-    db: Session,
+async def log_action(
+    db: AsyncSession,
     user_id: int,
     action: str,
     resource_type: str = None,
@@ -37,21 +38,23 @@ def log_action(
             created_at=datetime.now(timezone.utc)
         )
         db.add(entry)
-        db.commit()
+        await db.commit()
     except Exception as e:
         logger.error(f"Failed to log audit action '{action}': {e}")
         try:
-            db.rollback()
+            await db.rollback()
         except Exception:
             pass
 
 
-def get_audit_log(db: Session, user_id: int = None, action: str = None, limit: int = 100):
+async def get_audit_log(db: AsyncSession, user_id: int = None, action: str = None, limit: int = 100):
     """Retrieve audit log entries with optional filters."""
     from .models import AuditLog
-    query = db.query(AuditLog)
+    query = select(AuditLog)
     if user_id:
-        query = query.filter(AuditLog.user_id == user_id)
+        query = query.where(AuditLog.user_id == user_id)
     if action:
-        query = query.filter(AuditLog.action == action)
-    return query.order_by(AuditLog.created_at.desc()).limit(limit).all()
+        query = query.where(AuditLog.action == action)
+    query = query.order_by(AuditLog.created_at.desc()).limit(limit)
+    result = await db.execute(query)
+    return result.scalars().all()

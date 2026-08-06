@@ -22,6 +22,12 @@ try:
 except ImportError:
     HAS_PYTHON_DOCX = False
 
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+
 def extract_text_from_pdf(file_path: str) -> str:
     if not HAS_PYMUPDF:
         return "[PyMuPDF not installed] Fallback: Please install pymupdf to parse PDF text."
@@ -43,6 +49,20 @@ def extract_text_from_docx(file_path: str) -> str:
     except Exception as e:
         return f"[Word parsing error]: {str(e)}"
 
+def extract_text_from_excel(file_path: str) -> str:
+    if not HAS_PANDAS:
+        return "[pandas not installed] Fallback: Please install pandas to parse Excel documents."
+    try:
+        text_parts = []
+        df_dict = pd.read_excel(file_path, sheet_name=None)
+        for sheet_name, df in df_dict.items():
+            text_parts.append(f"## Sheet: {sheet_name}")
+            text_parts.append(df.to_csv(index=False))
+            text_parts.append("\n")
+        return "\n".join(text_parts)
+    except Exception as e:
+        return f"[Excel parsing error]: {str(e)}"
+
 def extract_text_from_txt(file_path: str) -> str:
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -58,6 +78,8 @@ def extract_content(file_path: str, file_type: str) -> str:
         raw_text = extract_text_from_pdf(file_path)
     elif ext in ["docx", "doc"]:
         raw_text = extract_text_from_docx(file_path)
+    elif ext in ["xlsx", "xls"]:
+        raw_text = extract_text_from_excel(file_path)
     else:
         raw_text = extract_text_from_txt(file_path)
 
@@ -145,6 +167,7 @@ def chunk_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> Li
 def process_file_upload(file_path: str, file_type: str, document_id: int) -> List[Dict[str, Any]]:
     """
     Extracts text, chunks it, and returns the chunks ready for vector database insertion.
+    Reads from a local file path — used in legacy / local-dev code paths.
     """
     raw_text = extract_content(file_path, file_type)
     text_chunks = chunk_text(raw_text)
@@ -159,5 +182,92 @@ def process_file_upload(file_path: str, file_type: str, document_id: int) -> Lis
                 "file_name": os.path.basename(file_path),
                 "file_type": file_type
             }
+        })
+    return processed_chunks
+
+
+def extract_content_from_bytes(file_bytes: bytes, file_type: str, filename: str = "document") -> str:
+    """
+    Extract and PII-redact text directly from in-memory bytes.
+    Used by background tasks that receive file content after the HTTP request
+    has already returned (Supabase Storage path or in-memory bytes from upload).
+    """
+    from .pii_redactor import redact_document
+    import io
+    ext = file_type.lower()
+    raw_text = ""
+
+    if ext == "pdf":
+        if not HAS_PYMUPDF:
+            return "[PyMuPDF not installed] Cannot parse PDF from bytes."
+        try:
+            with fitz.open(stream=file_bytes, filetype="pdf") as doc:
+                for page in doc:
+                    raw_text += page.get_text() + "\n"
+        except Exception as e:
+            return f"[PDF bytes parsing error]: {str(e)}"
+
+    elif ext in ["docx", "doc"]:
+        if not HAS_PYTHON_DOCX:
+            return "[python-docx not installed] Cannot parse DOCX from bytes."
+        try:
+            doc = docx.Document(io.BytesIO(file_bytes))
+            raw_text = "\n".join([p.text for p in doc.paragraphs])
+        except Exception as e:
+            return f"[DOCX bytes parsing error]: {str(e)}"
+
+    elif ext in ["xlsx", "xls"]:
+        if not HAS_PANDAS:
+            return "[pandas not installed] Cannot parse Excel from bytes."
+        try:
+            import io
+            df_dict = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
+            text_parts = []
+            for sheet_name, df in df_dict.items():
+                text_parts.append(f"## Sheet: {sheet_name}")
+                text_parts.append(df.to_csv(index=False))
+                text_parts.append("")
+            raw_text = "\n".join(text_parts)
+        except Exception as e:
+            return f"[Excel bytes parsing error]: {str(e)}"
+
+    else:
+        # TXT, CSV, MD — decode as UTF-8
+        try:
+            raw_text = file_bytes.decode("utf-8", errors="ignore")
+        except Exception as e:
+            return f"[Text decode error]: {str(e)}"
+
+    # PII Redaction Gate
+    redacted_text, count = redact_document(raw_text)
+    if count > 0:
+        logger.info(f"[Ingestion] PII redacted {count} entities from '{filename}'")
+    return redacted_text
+
+
+def process_file_upload_from_bytes(
+    file_bytes: bytes,
+    file_type: str,
+    document_id: int,
+    filename: str = "document",
+) -> List[Dict[str, Any]]:
+    """
+    Bytes-native ingestion pipeline — the canonical path used by BackgroundTasks.
+    No disk I/O required: operates entirely on the in-memory bytes passed from
+    the upload handler, eliminating any dependency on the local filesystem.
+    """
+    raw_text = extract_content_from_bytes(file_bytes, file_type, filename)
+    text_chunks = chunk_text(raw_text)
+
+    processed_chunks = []
+    for idx, chunk in enumerate(text_chunks):
+        processed_chunks.append({
+            "id": f"doc_{document_id}_chunk_{idx}",
+            "text": chunk,
+            "index": idx,
+            "metadata": {
+                "file_name": filename,
+                "file_type": file_type,
+            },
         })
     return processed_chunks

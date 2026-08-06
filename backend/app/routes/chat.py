@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
-import json
 
 from ..database import get_db
 from ..models import User, AIFailure
@@ -25,24 +24,24 @@ class FeedbackPayload(BaseModel):
 async def chat_with_ai(
     query: ChatQuery,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Main endpoint for the AI Copilot using Server-Sent Events (SSE).
     """
     if getattr(query, 'stream', True):  # Default to streaming
         return StreamingResponse(
-            ceo_agent.process_query_stream(current_user, query.message, db, scope=query.scope),
+            ceo_agent.process_query_stream(current_user, query.query, db, scope=query.scope),
             media_type="text/event-stream"
         )
-    return await ceo_agent.process_query(current_user, query.message, db, scope=query.scope)
+    return await ceo_agent.process_query(current_user, query.query, db, scope=query.scope)
 
 
 @router.post("/feedback")
-def submit_feedback(
+async def submit_feedback(
     payload: FeedbackPayload,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Human-in-the-Loop (HITL) endpoint.
@@ -58,9 +57,8 @@ def submit_feedback(
             notes=payload.notes,
         )
         db.add(failure)
-        db.commit()
+        await db.commit()
         return {"status": "logged", "message": "Feedback recorded. Thank you — this helps us improve!"}
 
     # thumbs_up — acknowledge but don't store
     return {"status": "ok", "message": "Great! Glad the response was helpful."}
-

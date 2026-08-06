@@ -46,8 +46,10 @@ export default function Login() {
   const fillDemo = (role) => {
     const creds = {
       admin: { email: 'admin@processpilot.ai', password: 'admin123' },
-      employee: { email: 'john@processpilot.ai', password: 'john123' },
+      director: { email: 'sarah@processpilot.ai', password: 'sarah123' }, // Usually Sarah or someone promoted
       manager: { email: 'sarah@processpilot.ai', password: 'sarah123' },
+      employee: { email: 'john@processpilot.ai', password: 'john123' },
+      contractor: { email: 'john@processpilot.ai', password: 'john123' },
     };
     setEmail(creds[role].email);
     setPassword(creds[role].password);
@@ -144,11 +146,13 @@ export default function Login() {
             <div style={{ flex: 1, height: 1, background: 'var(--border-subtle)' }} />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
             {[
               { role: 'admin', label: 'Admin', badge: 'badge-blue' },
+              { role: 'director', label: 'Director', badge: 'badge-gold' },
               { role: 'manager', label: 'Manager', badge: 'badge-purple' },
               { role: 'employee', label: 'Employee', badge: 'badge-neutral' },
+              { role: 'contractor', label: 'Contractor', badge: 'badge-neutral' },
             ].map(d => (
               <button
                 key={d.role}

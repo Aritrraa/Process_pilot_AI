@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import update, delete as sql_delete
 from datetime import timedelta
 
 from ..database import get_db
-from ..models import User, Department, UserSetting
+from ..models import User, Department, UserSetting, Task, Document
 from ..schemas import UserCreate, UserLogin, Token, UserResponse, DepartmentResponse, DepartmentCreate
 from ..auth import get_password_hash, verify_password, create_access_token, get_current_user
 from ..config import settings
@@ -12,10 +14,11 @@ from ..rate_limiter import rate_limit
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED,
-             dependencies=[Depends(rate_limit(limit=3, window=3600))])
-def register(user_in: UserCreate, db: Session = Depends(get_db)):
+             dependencies=[Depends(rate_limit(limit=10, window=3600))])
+async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     # Check if user already exists
-    existing = db.query(User).filter(User.email == user_in.email).first()
+    result = await db.execute(select(User).filter(User.email == user_in.email))
+    existing = result.scalars().first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -31,7 +34,8 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         
     # Verify department if provided
     if user_in.department_id:
-        dept = db.query(Department).filter(Department.id == user_in.department_id).first()
+        dept_result = await db.execute(select(Department).filter(Department.id == user_in.department_id))
+        dept = dept_result.scalars().first()
         if not dept:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -49,20 +53,21 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         manager_id=user_in.manager_id
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     
     # Auto-initialize empty user setting
     setting = UserSetting(user_id=user.id, gemini_api_key="", system_prompt="")
     db.add(setting)
-    db.commit()
+    await db.commit()
     
     return user
 
 @router.post("/login", response_model=Token,
-             dependencies=[Depends(rate_limit(limit=5, window=60))])
-def login(user_in: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_in.email).first()
+             dependencies=[Depends(rate_limit(limit=20, window=3600))])
+async def login(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).filter(User.email == user_in.email))
+    user = result.scalars().first()
     if not user or not verify_password(user_in.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -81,16 +86,28 @@ def login(user_in: UserLogin, db: Session = Depends(get_db)):
     }
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 @router.get("/departments", response_model=list[DepartmentResponse])
-def list_departments(db: Session = Depends(get_db)):
-    return db.query(Department).all()
+async def list_departments(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Department))
+    return result.scalars().all()
 
 @router.post("/departments", response_model=DepartmentResponse, status_code=status.HTTP_201_CREATED)
-def create_department(dept_in: DepartmentCreate, db: Session = Depends(get_db)):
-    existing = db.query(Department).filter(Department.name == dept_in.name).first()
+async def create_department(
+    dept_in: DepartmentCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new department (Admin only)."""
+    if current_user.role != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can create departments"
+        )
+    result = await db.execute(select(Department).filter(Department.name == dept_in.name))
+    existing = result.scalars().first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -98,27 +115,49 @@ def create_department(dept_in: DepartmentCreate, db: Session = Depends(get_db)):
         )
     dept = Department(name=dept_in.name, description=dept_in.description)
     db.add(dept)
-    db.commit()
-    db.refresh(dept)
+    await db.commit()
+    await db.refresh(dept)
     return dept
 
+@router.get("/users", response_model=list[UserResponse])
+async def list_all_users(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all users (Admin only)"""
+    if current_user.role != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can list all users"
+        )
+    result = await db.execute(select(User))
+    return result.scalars().all()
+
 @router.get("/managers", response_model=list[UserResponse])
-def list_managers(db: Session = Depends(get_db)):
-    """List all managers in the system (for signup assignment)."""
-    return db.query(User).filter(User.role == "Manager").all()
+async def list_managers(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all managers in the system (authenticated users only)."""
+    result = await db.execute(select(User).filter(User.role == "Manager"))
+    return result.scalars().all()
 
 @router.get("/team", response_model=list[UserResponse])
-def list_team(
+async def list_team(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """List assignable users for the current user based on role."""
     if current_user.role == "Admin":
-        return db.query(User).all()
+        result = await db.execute(select(User))
+        return result.scalars().all()
     elif current_user.role == "Manager":
-        return db.query(User).filter(
-            (User.manager_id == current_user.id) | (User.id == current_user.id)
-        ).all()
+        result = await db.execute(
+            select(User).filter(
+                (User.manager_id == current_user.id) | (User.id == current_user.id)
+            )
+        )
+        return result.scalars().all()
     return [current_user]
 
 from pydantic import BaseModel
@@ -130,12 +169,16 @@ class EmployeeTransferRequest(BaseModel):
 class SelectManagerRequest(BaseModel):
     manager_id: int
 
+class RoleChangeRequest(BaseModel):
+    new_role: str
+    new_manager_id: Optional[int] = None
+
 @router.patch("/employees/{employee_id}/transfer", response_model=UserResponse)
-def transfer_employee(
+async def transfer_employee(
     employee_id: int,
     payload: EmployeeTransferRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     if current_user.role not in ("Manager", "Admin"):
         raise HTTPException(
@@ -143,7 +186,8 @@ def transfer_employee(
             detail="Only managers and admins can transfer employees"
         )
         
-    employee = db.query(User).filter(User.id == employee_id).first()
+    result = await db.execute(select(User).filter(User.id == employee_id))
+    employee = result.scalars().first()
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -161,22 +205,23 @@ def transfer_employee(
     
     # Auto-align department if manager_id is specified
     if payload.manager_id:
-        new_mgr = db.query(User).filter(User.id == payload.manager_id).first()
+        mgr_result = await db.execute(select(User).filter(User.id == payload.manager_id))
+        new_mgr = mgr_result.scalars().first()
         if new_mgr:
             employee.department_id = new_mgr.department_id
     else:
         # If released, set department_id to None to prompt full re-assignment
         employee.department_id = None
         
-    db.commit()
-    db.refresh(employee)
+    await db.commit()
+    await db.refresh(employee)
     return employee
 
 @router.patch("/select-manager", response_model=UserResponse)
-def select_manager(
+async def select_manager(
     payload: SelectManagerRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     if current_user.role != "Employee":
         raise HTTPException(
@@ -190,7 +235,8 @@ def select_manager(
             detail="You already have an assigned manager"
         )
         
-    manager = db.query(User).filter(User.id == payload.manager_id, User.role == "Manager").first()
+    mgr_result = await db.execute(select(User).filter(User.id == payload.manager_id, User.role == "Manager"))
+    manager = mgr_result.scalars().first()
     if not manager:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -200,24 +246,76 @@ def select_manager(
     current_user.manager_id = manager.id
     current_user.department_id = manager.department_id
     
-    db.commit()
-    db.refresh(current_user)
+    await db.commit()
+    await db.refresh(current_user)
     return current_user
 
 
 class UserDeleteRequest(BaseModel):
     successor_id: Optional[int] = None
 
+@router.patch("/users/{user_id}/role", response_model=UserResponse)
+async def change_user_role(
+    user_id: int,
+    payload: RoleChangeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if current_user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Only admins can change roles")
+        
+    result = await db.execute(select(User).filter(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    valid_roles = ["Admin", "Director", "Manager", "Employee", "Contractor"]
+    if payload.new_role not in valid_roles:
+        raise HTTPException(status_code=400, detail="Invalid role")
+
+    old_role = user.role
+    user.role = payload.new_role
+
+    # If promoting to Director or Admin, they don't have a manager
+    if payload.new_role in ["Admin", "Director"]:
+        user.manager_id = None
+        
+    # If Manager/Employee/Contractor, they need a manager_id (except top level managers occasionally)
+    elif payload.new_manager_id is not None:
+        mgr_result = await db.execute(select(User).filter(User.id == payload.new_manager_id))
+        new_mgr = mgr_result.scalars().first()
+        if not new_mgr:
+            raise HTTPException(status_code=404, detail="New manager not found")
+        user.manager_id = new_mgr.id
+        user.department_id = new_mgr.department_id
+
+    # If demoting a Manager/Director, we must re-assign their direct reports and assigned tasks
+    if old_role in ["Manager", "Director"] and payload.new_role in ["Employee", "Contractor"]:
+        if not payload.new_manager_id:
+            raise HTTPException(status_code=400, detail="Must provide new_manager_id to inherit subordinates when demoting a manager.")
+        
+        # Re-assign subordinates
+        await db.execute(
+            update(User).where(User.manager_id == user.id).values(manager_id=payload.new_manager_id)
+        )
+        # Re-assign tasks where this person was the manager
+        await db.execute(
+            update(Task).where(Task.manager_id == user.id).values(manager_id=payload.new_manager_id)
+        )
+
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_200_OK)
-def delete_user(
+async def delete_user(
     user_id: int,
     payload: UserDeleteRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
-    from ..models import Task
-
     # 1. Access Control: Only Admin can delete accounts
     if current_user.role != "Admin":
         raise HTTPException(
@@ -226,7 +324,8 @@ def delete_user(
         )
 
     # 2. Find user to delete
-    user_to_delete = db.query(User).filter(User.id == user_id).first()
+    result = await db.execute(select(User).filter(User.id == user_id))
+    user_to_delete = result.scalars().first()
     if not user_to_delete:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -240,120 +339,276 @@ def delete_user(
             detail="You cannot delete your own admin account"
         )
 
-    # 4. Handle Employee Deletion
-    if user_to_delete.role == "Employee":
+    # Shared helper: reassign all documents owned by user_to_delete → Admin
+    # Append original owner name in parentheses so history is preserved.
+    async def _reassign_documents_to_admin(user: User):
+        # Find the first Admin user (excluding the one being deleted)
+        admin_result = await db.execute(
+            select(User).filter(User.role == "Admin", User.id != user.id)
+        )
+        admin_user = admin_result.scalars().first()
+        if not admin_user:
+            # If no other admin found, just soft-clear the FK to None (allowed by schema)
+            await db.execute(
+                update(Document).where(Document.uploaded_by == user.id).values(uploaded_by=None)
+            )
+            return
+        # Reassign ownership and annotate title with original owner name
+        docs_result = await db.execute(select(Document).filter(Document.uploaded_by == user.id))
+        docs = docs_result.scalars().all()
+        for doc in docs:
+            original_name = user.full_name or user.email
+            # Only append the tag once (idempotent)
+            if f"(originally by {original_name})" not in (doc.title or ""):
+                doc.title = f"{doc.title} (originally by {original_name})"
+            doc.uploaded_by = admin_user.id
+        await db.flush()
+
+    # 4. Handle Employee / Contractor Deletion
+    if user_to_delete.role in ("Employee", "Contractor"):
         manager_id = user_to_delete.manager_id
+        # Reassign documents → Admin with ownership breadcrumb in title
+        await _reassign_documents_to_admin(user_to_delete)
         if manager_id:
-            # Reassign all employee's tasks to their present manager
-            db.query(Task).filter(Task.assigned_to == user_to_delete.id).update(
-                {Task.assigned_to: manager_id, Task.manager_id: manager_id},
-                synchronize_session=False
+            # Reassign ALL their tasks to their team manager
+            await db.execute(
+                update(Task).where(Task.assigned_to == user_to_delete.id).values(
+                    assigned_to=manager_id, manager_id=manager_id
+                )
             )
         else:
-            # No manager: unassign tasks
-            db.query(Task).filter(Task.assigned_to == user_to_delete.id).update(
-                {Task.assigned_to: None},
-                synchronize_session=False
+            # No manager – NULL out (DB-level SET NULL handles this safely)
+            await db.execute(
+                update(Task).where(Task.assigned_to == user_to_delete.id).values(assigned_to=None)
             )
-        
-        # Clean settings and delete user
-        db.query(UserSetting).filter(UserSetting.user_id == user_to_delete.id).delete()
-        db.delete(user_to_delete)
-        db.commit()
-        return {"detail": "Employee account deleted and tasks transferred to manager."}
 
-    # 5. Handle Manager Deletion
-    elif user_to_delete.role == "Manager":
+        await db.execute(sql_delete(UserSetting).where(UserSetting.user_id == user_to_delete.id))
+        await db.delete(user_to_delete)
+        await db.commit()
+        return {"detail": "Account deleted. Tasks transferred to the team manager."}
+
+    # 5. Handle Manager / Director Deletion
+    elif user_to_delete.role in ("Manager", "Director"):
         if not payload.successor_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Successor manager/employee ID is required to delete a manager"
             )
+        # Reassign documents → Admin with ownership breadcrumb in title
+        await _reassign_documents_to_admin(user_to_delete)
 
-        successor = db.query(User).filter(User.id == payload.successor_id).first()
+        succ_result = await db.execute(select(User).filter(User.id == payload.successor_id))
+        successor = succ_result.scalars().first()
         if not successor:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Successor not found"
             )
 
-        # Successor cannot be the deleted manager themselves
         if successor.id == user_to_delete.id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Successor cannot be the manager being deleted"
             )
 
-        # Case A: Successor is an existing Manager
         if successor.role == "Manager":
-            # Successor inherits deleted manager's tasks
-            db.query(Task).filter(Task.assigned_to == user_to_delete.id).update(
-                {Task.assigned_to: successor.id, Task.manager_id: successor.id},
-                synchronize_session=False
+            await db.execute(
+                update(Task).where(Task.assigned_to == user_to_delete.id).values(
+                    assigned_to=successor.id, manager_id=successor.id
+                )
             )
-            
-            # Successor inherits deleted manager's reports (team members)
-            reports = db.query(User).filter(User.manager_id == user_to_delete.id).all()
+            reports_result = await db.execute(select(User).filter(User.manager_id == user_to_delete.id))
+            reports = reports_result.scalars().all()
             for report in reports:
                 report.manager_id = successor.id
-                # Align department to successor's department
                 report.department_id = successor.department_id
-                # Update report tasks' manager_id to successor so successor can view/manage them
-                db.query(Task).filter(Task.assigned_to == report.id).update(
-                    {Task.manager_id: successor.id},
-                    synchronize_session=False
+                await db.execute(
+                    update(Task).where(Task.assigned_to == report.id).values(manager_id=successor.id)
                 )
 
-        # Case B: Successor is an Employee
         elif successor.role == "Employee":
             previous_manager_id = successor.manager_id
-
-            # Promote employee to Manager
             successor.role = "Manager"
             successor.manager_id = None
-            # Move successor to the deleted manager's department (takes over team department)
             successor.department_id = user_to_delete.department_id
 
-            # Successor's current employee tasks are passed to their previous manager
             if previous_manager_id:
-                db.query(Task).filter(Task.assigned_to == successor.id).update(
-                    {Task.assigned_to: previous_manager_id, Task.manager_id: previous_manager_id},
-                    synchronize_session=False
+                await db.execute(
+                    update(Task).where(Task.assigned_to == successor.id).values(
+                        assigned_to=previous_manager_id, manager_id=previous_manager_id
+                    )
                 )
             else:
-                db.query(Task).filter(Task.assigned_to == successor.id).update(
-                    {Task.assigned_to: None},
-                    synchronize_session=False
+                await db.execute(
+                    update(Task).where(Task.assigned_to == successor.id).values(assigned_to=None)
                 )
 
-            # Successor inherits deleted manager's tasks
-            db.query(Task).filter(Task.assigned_to == user_to_delete.id).update(
-                {Task.assigned_to: successor.id, Task.manager_id: successor.id},
-                synchronize_session=False
+            await db.execute(
+                update(Task).where(Task.assigned_to == user_to_delete.id).values(
+                    assigned_to=successor.id, manager_id=successor.id
+                )
             )
 
-            # Successor inherits deleted manager's reports (team members)
-            reports = db.query(User).filter(User.manager_id == user_to_delete.id).all()
+            reports_result = await db.execute(select(User).filter(User.manager_id == user_to_delete.id))
+            reports = reports_result.scalars().all()
             for report in reports:
                 report.manager_id = successor.id
                 report.department_id = successor.department_id
-                # Update report tasks' manager_id to successor so successor can view/manage them
-                db.query(Task).filter(Task.assigned_to == report.id).update(
-                    {Task.manager_id: successor.id},
-                    synchronize_session=False
+                await db.execute(
+                    update(Task).where(Task.assigned_to == report.id).values(manager_id=successor.id)
                 )
 
-        # Clean settings and delete user
-        db.query(UserSetting).filter(UserSetting.user_id == user_to_delete.id).delete()
-        db.delete(user_to_delete)
-        db.commit()
+        await db.execute(sql_delete(UserSetting).where(UserSetting.user_id == user_to_delete.id))
+        await db.delete(user_to_delete)
+        await db.commit()
         return {"detail": "Manager account deleted and tasks/reports successfully transferred."}
 
     # 6. Handle Admin Deletion (non-self)
     else:
-        # Clean settings and delete user
-        db.query(UserSetting).filter(UserSetting.user_id == user_to_delete.id).delete()
-        db.delete(user_to_delete)
-        db.commit()
-        return {"detail": "Admin account deleted."}
+        # Reassign documents → another Admin with ownership breadcrumb
+        await _reassign_documents_to_admin(user_to_delete)
+        # Reassign tasks to current_user (the admin performing the deletion)
+        await db.execute(
+            update(Task).where(Task.assigned_to == user_to_delete.id).values(
+                assigned_to=current_user.id, manager_id=current_user.id
+            )
+        )
+        await db.execute(sql_delete(UserSetting).where(UserSetting.user_id == user_to_delete.id))
+        await db.delete(user_to_delete)
+        await db.commit()
+        return {"detail": "Admin account deleted. Documents and tasks reassigned."}
+
+
+# ── Circular Reporting Detection ───────────────────────────────────────────────
+async def _is_subordinate(db: AsyncSession, user_id: int, potential_ancestor_id: int) -> bool:
+    """
+    Returns True if user_id is already in the downstream reporting tree of
+    potential_ancestor_id. Used to prevent circular manager assignments.
+    """
+    visited = set()
+    queue = [user_id]
+    while queue:
+        current = queue.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        result = await db.execute(select(User).filter(User.manager_id == current))
+        subordinates = result.scalars().all()
+        for sub in subordinates:
+            if sub.id == potential_ancestor_id:
+                return True
+            queue.append(sub.id)
+    return False
+
+
+class SwapPositionRequest(BaseModel):
+    manager_id: int   # The Manager being demoted to Employee
+    employee_id: int  # The Employee being promoted to Manager
+
+
+@router.post("/users/swap-positions")
+async def swap_positions(
+    payload: SwapPositionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Atomically swap a Manager and an Employee's positions:
+    - Manager → Employee (inherits the employee's IC tasks)
+    - Employee → Manager (inherits the manager's team, oversight tasks, department)
+    All operations occur in a single SQL transaction.
+    """
+    if current_user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Only admins can swap positions")
+
+    # 1. Fetch both users
+    mgr_result = await db.execute(select(User).filter(User.id == payload.manager_id))
+    manager = mgr_result.scalars().first()
+    emp_result = await db.execute(select(User).filter(User.id == payload.employee_id))
+    employee = emp_result.scalars().first()
+
+    if not manager or not employee:
+        raise HTTPException(status_code=404, detail="One or both users not found")
+
+    if manager.role not in ("Manager", "Director"):
+        raise HTTPException(status_code=400, detail=f"User {manager.id} must be a Manager or Director to swap")
+
+    if employee.role not in ("Employee", "Contractor"):
+        raise HTTPException(status_code=400, detail=f"User {employee.id} must be an Employee or Contractor to swap")
+
+    if manager.id == employee.id:
+        raise HTTPException(status_code=400, detail="Cannot swap a user with themselves")
+
+    # 2. Circular reporting check: ensure employee is not already managing the manager
+    if await _is_subordinate(db, manager.id, employee.id):
+        raise HTTPException(
+            status_code=400,
+            detail="Circular reporting detected. The employee is already in the manager's downstream tree."
+        )
+
+    # 3. Save original values before swapping
+    old_mgr_dept = manager.department_id
+    old_emp_dept = employee.department_id
+    old_emp_manager_id = employee.manager_id
+
+    # 4. Promote employee → Manager
+    employee.role = manager.role           # Inherits Director or Manager title
+    employee.department_id = old_mgr_dept  # Inherits the manager's department
+    employee.manager_id = None             # Top-level in their new department
+
+    # 5. Demote manager → Employee
+    manager.role = "Employee"
+    manager.department_id = old_emp_dept   # Inherits the employee's old department
+    manager.manager_id = employee.id       # Now reports to the newly promoted manager
+
+    # 6. Flush to DB so IDs are stable for subsequent UPDATE statements
+    await db.flush()
+
+    # 7. Transfer direct reports from old manager → new manager (employee)
+    await db.execute(
+        update(User)
+        .where(User.manager_id == manager.id, User.id != employee.id)
+        .values(manager_id=employee.id, department_id=old_mgr_dept)
+    )
+
+    # 8. Transfer task OVERSIGHT: tasks managed by old manager → new manager
+    await db.execute(
+        update(Task).where(Task.manager_id == manager.id).values(manager_id=employee.id)
+    )
+
+    # 9. Transfer ASSIGNED tasks: old manager's IC tasks → new employee (old manager)
+    #    and old employee's IC tasks → old manager (now employee)
+    # Step A: temp sentinel to avoid overlapping update collisions
+    TEMP_SENTINEL = -99999
+    await db.execute(
+        update(Task).where(Task.assigned_to == manager.id).values(assigned_to=TEMP_SENTINEL)
+    )
+    # Step B: give employee's tasks to manager
+    await db.execute(
+        update(Task).where(Task.assigned_to == employee.id).values(assigned_to=manager.id)
+    )
+    # Step C: give manager's tasks (sentinel) to employee
+    await db.execute(
+        update(Task).where(Task.assigned_to == TEMP_SENTINEL).values(assigned_to=employee.id)
+    )
+
+    await db.commit()
+    await db.refresh(manager)
+    await db.refresh(employee)
+
+    return {
+        "detail": "Position swap completed successfully.",
+        "new_manager": {
+            "id": employee.id,
+            "name": employee.full_name,
+            "role": employee.role,
+            "department_id": employee.department_id
+        },
+        "new_employee": {
+            "id": manager.id,
+            "name": manager.full_name,
+            "role": manager.role,
+            "department_id": manager.department_id
+        }
+    }
 

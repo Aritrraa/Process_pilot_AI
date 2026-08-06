@@ -1254,9 +1254,10 @@ def seed():
     admin_data = {"email": "admin@processpilot.ai", "password": "admin123", "full_name": "Admin Principal", "role": "Admin", "department_id": 1}
     sarah_data = {"email": "sarah@processpilot.ai", "password": "sarah123", "full_name": "Sarah Jenkins", "role": "Manager", "department_id": 1}
     mark_data = {"email": "mark@processpilot.ai", "password": "mark123", "full_name": "Mark Somerhalder", "role": "Manager", "department_id": 2}
+    michael_data = {"email": "michael@processpilot.ai", "password": "michael123", "full_name": "Michael Scott", "role": "Director", "department_id": 1}
     
     managers = {}
-    for user_data in [admin_data, sarah_data, mark_data]:
+    for user_data in [admin_data, sarah_data, mark_data, michael_data]:
         r = requests.post(f"{BASE_URL}/auth/register", json=user_data)
         if r.status_code == 201:
             res_json = r.json()
@@ -1275,12 +1276,14 @@ def seed():
     # Retrieve Sarah's and Mark's database IDs
     sarah_id = managers.get("sarah@processpilot.ai")
     mark_id = managers.get("mark@processpilot.ai")
+    michael_id = managers.get("michael@processpilot.ai")
     admin_id = managers.get("admin@processpilot.ai")
     
     user_ids = {
         "admin@processpilot.ai": admin_id,
         "sarah@processpilot.ai": sarah_id,
         "mark@processpilot.ai": mark_id,
+        "michael@processpilot.ai": michael_id,
     }
     
     # Define employees with their manager IDs
@@ -1290,6 +1293,7 @@ def seed():
         {"email": "alice@processpilot.ai", "password": "alice123", "full_name": "Alice Vance", "role": "Employee", "department_id": 3, "manager_id": mark_id},
         {"email": "emma@processpilot.ai", "password": "emma123", "full_name": "Emma Watson", "role": "Employee", "department_id": 2, "manager_id": mark_id},
         {"email": "elena@processpilot.ai", "password": "elena123", "full_name": "Elena Rostova", "role": "Employee", "department_id": 3, "manager_id": mark_id},
+        {"email": "chris@processpilot.ai", "password": "chris123", "full_name": "Chris Contractor", "role": "Contractor", "department_id": 1, "manager_id": michael_id},
     ]
     
     for emp in employees:
@@ -1315,6 +1319,7 @@ def seed():
         ("admin@processpilot.ai", "admin123"),
         ("sarah@processpilot.ai", "sarah123"),
         ("mark@processpilot.ai", "mark123"),
+        ("michael@processpilot.ai", "michael123"),
         ("john@processpilot.ai", "john123"),
         ("rohan@processpilot.ai", "rohan123"),
         ("alice@processpilot.ai", "alice123"),
@@ -1373,6 +1378,30 @@ def seed():
                 os.remove(tmp_path)
             except Exception:
                 pass
+
+    # Also upload the physical Excel files
+    excel_files = [
+        ("C:\\Users\\KIIT\\Desktop\\FULL_STACK\\sample_projects.xlsx", "sample_projects.xlsx"),
+        ("C:\\Users\\KIIT\\Desktop\\FULL_STACK\\sample_employees.xlsx", "sample_employees.xlsx"),
+    ]
+    for epath, ename in excel_files:
+        if os.path.exists(epath):
+            try:
+                with open(epath, "rb") as f:
+                    r = requests.post(
+                        f"{BASE_URL}/documents/upload",
+                        headers={"Authorization": f"Bearer {admin_token}"},
+                        files={"file": (ename, f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                        data={"department_id": "1"}
+                    )
+                if r.status_code in (200, 201):
+                    print(f"  ✓ {ename} (uploaded by admin)")
+                else:
+                    print(f"  ✗ {ename} — {r.text[:120]}")
+            except Exception as e:
+                print(f"  ✗ {ename} — {e}")
+        else:
+            print(f"  ⚠ {ename} not found at {epath}")
 
     # ── 6. Create Tasks ───────────────────────────────────────────────────────
     print(f"\n[5/6] Creating {len(TASKS)} tasks...")

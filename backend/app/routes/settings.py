@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from ..database import get_db
 from ..models import User, UserSetting
@@ -9,11 +10,12 @@ from ..auth import get_current_user
 router = APIRouter(prefix="/settings", tags=["Settings"])
 
 @router.get("/", response_model=UserSettingsResponse)
-def get_settings(
+async def get_settings(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
-    setting = db.query(UserSetting).filter(UserSetting.user_id == current_user.id).first()
+    result = await db.execute(select(UserSetting).filter(UserSetting.user_id == current_user.id))
+    setting = result.scalars().first()
     if not setting:
         # Auto-create if missing
         setting = UserSetting(
@@ -25,17 +27,18 @@ def get_settings(
             system_prompt=""
         )
         db.add(setting)
-        db.commit()
-        db.refresh(setting)
-    return setting
+        await db.commit()
+        await db.refresh(setting)
+    return UserSettingsResponse.from_settings(setting)
 
 @router.put("/", response_model=UserSettingsResponse)
-def update_settings(
+async def update_settings(
     settings_in: UserSettingsUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
-    setting = db.query(UserSetting).filter(UserSetting.user_id == current_user.id).first()
+    result = await db.execute(select(UserSetting).filter(UserSetting.user_id == current_user.id))
+    setting = result.scalars().first()
     if not setting:
         setting = UserSetting(user_id=current_user.id)
         db.add(setting)
@@ -51,6 +54,6 @@ def update_settings(
     if settings_in.system_prompt is not None:
         setting.system_prompt = settings_in.system_prompt
         
-    db.commit()
-    db.refresh(setting)
-    return setting
+    await db.commit()
+    await db.refresh(setting)
+    return UserSettingsResponse.from_settings(setting)

@@ -31,7 +31,7 @@ export default function Tasks() {
   const { data: team = [] } = useQuery({
     queryKey: ['team'],
     queryFn: () => api.getTeam(),
-    enabled: user?.role === 'Admin' || user?.role === 'Manager',
+    enabled: user?.role === 'Admin' || user?.role === 'Manager' || user?.role === 'Director',
     staleTime: 300000,
   });
 
@@ -128,7 +128,7 @@ export default function Tasks() {
                 style={{ minHeight: 80 }}
               />
             </div>
-            {(user?.role === 'Admin' || user?.role === 'Manager') && (
+            {(user?.role === 'Admin' || user?.role === 'Manager' || user?.role === 'Director') && (
               <div className="form-group" style={{ marginTop: 14 }}>
                 <label className="form-label">Assign To</label>
                 <select className="form-select" value={assignedTo} onChange={e => setAssignedTo(e.target.value)}>
@@ -192,7 +192,7 @@ export default function Tasks() {
                       {task.description && (
                         <div className="task-card-desc">{task.description}</div>
                       )}
-                      {user && (user.role === 'Admin' || user.role === 'Manager') ? (
+                      {user && (user.role === 'Admin' || user.role === 'Manager' || user.role === 'Director') ? (
                         <div style={{ marginBottom: 10 }} onClick={e => e.stopPropagation()}>
                           <select
                             value={task.assigned_to || ''}

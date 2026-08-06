@@ -37,33 +37,45 @@ class Settings(BaseSettings):
         return v or "development"
     
     # Auth Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "dev_secret_key_processpilot_ai_9876543210")
+    SECRET_KEY: str = "dev_secret_key_processpilot_ai_9876543210"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
 
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./processpilot.db")
+    DATABASE_URL: str = "sqlite:///./processpilot.db"
+    
+    # Redis
+    REDIS_URL: str = "redis://localhost:6379/0"
     
     # Vector Database Settings
-    VECTOR_DB_TYPE: str = os.getenv("VECTOR_DB_TYPE", "chroma")  # chroma, pinecone, qdrant
+    VECTOR_DB_TYPE: str = "pgvector"  # pgvector, pinecone, qdrant, chroma
     CHROMA_PERSIST_DIR: str = "./chroma_db"
     
     # Pinecone Managed Credentials
-    PINECONE_API_KEY: Optional[str] = os.getenv("PINECONE_API_KEY", None)
-    PINECONE_ENV: Optional[str] = os.getenv("PINECONE_ENV", None)
-    PINECONE_INDEX: str = os.getenv("PINECONE_INDEX", "processpilot")
+    PINECONE_API_KEY: Optional[str] = None
+    PINECONE_ENV: Optional[str] = None
+    PINECONE_INDEX: str = "processpilot"
     
     # Qdrant Managed Credentials
-    QDRANT_URL: Optional[str] = os.getenv("QDRANT_URL", None)
-    QDRANT_API_KEY: Optional[str] = os.getenv("QDRANT_API_KEY", None)
+    QDRANT_URL: Optional[str] = None
+    QDRANT_API_KEY: Optional[str] = None
     
     # Upload Settings
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE_MB: int = 10
-    ALLOWED_FILE_TYPES: List[str] = ["pdf", "docx", "doc", "txt", "csv", "md"]
+    ALLOWED_FILE_TYPES: List[str] = ["pdf", "docx", "doc", "txt", "csv", "md", "xlsx", "xls"]
+
+    # Supabase Storage — for persistent file storage on Render
+    # Set these env vars to enable Supabase Storage bucket uploads.
+    # Without them, files fall back to local disk (ephemeral on Render).
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_KEY: Optional[str] = None
+    SUPABASE_STORAGE_BUCKET: str = "documents"
 
     class Config:
         case_sensitive = True
+        env_file = ".env"
+        env_file_encoding = "utf-8"
 
 settings = Settings()
 

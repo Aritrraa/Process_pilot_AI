@@ -48,6 +48,20 @@ export const api = {
       body: JSON.stringify({ manager_id: managerId })
     }).then(handleResponse),
 
+  changeUserRole: (userId, newRole, newManagerId = null) =>
+    fetch(`${BASE_URL}/auth/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ new_role: newRole, new_manager_id: newManagerId })
+    }).then(handleResponse),
+
+  swapPositions: (managerId, employeeId) =>
+    fetch(`${BASE_URL}/auth/users/swap-positions`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ manager_id: managerId, employee_id: employeeId })
+    }).then(handleResponse),
+
   selectManager: (managerId) =>
     fetch(`${BASE_URL}/auth/select-manager`, {
       method: 'PATCH',

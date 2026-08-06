@@ -1,12 +1,17 @@
+import asyncio
 import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from sqlalchemy import text
+from sqlalchemy.future import select
 
 from .config import settings
-from .database import Base, engine, get_db
+from .database import Base, engine
 from .routes import auth, documents, meetings, tasks, settings as settings_routes, chat, analytics_routes, knowledge_graph_routes, ws
 
 # Configure structured logging
@@ -16,20 +21,91 @@ logging.basicConfig(
 )
 logger = logging.getLogger("processpilot")
 
-from sqlalchemy import text
 
-# Create all database tables on startup
-is_postgres = "postgresql" in settings.DATABASE_URL or "postgres" in settings.DATABASE_URL
-if is_postgres:
-    # Ensure pgvector extension is enabled before creating tables
-    with engine.begin() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+# ──── Application Lifespan: Async startup/shutdown ────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Async lifespan context — replaces deprecated @app.on_event."""
+    # ── Startup ────────────────────────────────────────────────────────────
+    logger.info("[Startup] Initializing database schema...")
+    async with engine.begin() as conn:
+        is_postgres = "postgresql" in settings.DATABASE_URL or "postgres" in settings.DATABASE_URL
+        if is_postgres:
+            # Ensure pgvector extension is enabled before creating tables
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+        # Create all tables (idempotent)
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("[Startup] Database schema ready.")
 
-Base.metadata.create_all(bind=engine)
+    # ── Populate knowledge graph from existing records ─────────────────────
+    await _populate_knowledge_graph()
+
+    yield  # App is now running
+
+    # ── Shutdown ───────────────────────────────────────────────────────────
+    logger.info("[Shutdown] Disposing DB engine connections...")
+    await engine.dispose()
+    logger.info("[Shutdown] Cleanup complete.")
+
+
+async def _populate_knowledge_graph():
+    """Async knowledge graph seeding on first startup."""
+    try:
+        from .database import SessionLocal
+        from .models import User, Department, Document
+        from .knowledge_graph import knowledge_graph
+
+        async with SessionLocal() as db:
+            stats = await knowledge_graph.get_graph_stats(db)
+            if stats.get("total_entities", 0) == 0:
+                logger.info("[KnowledgeGraph] Graph is empty. Populating from existing database records...")
+
+                r_depts = await db.execute(select(Department))
+                depts = r_depts.scalars().all()
+                for d in depts:
+                    await knowledge_graph.add_entity(db, f"dept_{d.name}", "Department", {"name": d.name})
+
+                r_users = await db.execute(select(User))
+                users = r_users.scalars().all()
+                user_map = {u.id: u for u in users}
+                for u in users:
+                    user_node = f"user_{u.email}"
+                    await knowledge_graph.add_entity(db, user_node, "User", {"email": u.email, "name": u.full_name or u.email, "role": u.role})
+                    if u.department_id:
+                        dept = next((d for d in depts if d.id == u.department_id), None)
+                        if dept:
+                            await knowledge_graph.add_relationship(db, user_node, f"dept_{dept.name}", "member_of")
+                    if u.manager_id and u.manager_id in user_map:
+                        manager = user_map[u.manager_id]
+                        await knowledge_graph.add_relationship(db, user_node, f"user_{manager.email}", "reports_to")
+
+                r_docs = await db.execute(select(Document))
+                docs = r_docs.scalars().all()
+                for doc in docs:
+                    uploader = user_map.get(doc.uploaded_by)
+                    uploader_email = uploader.email if uploader else "admin@processpilot.ai"
+                    dept = next((d for d in depts if d.id == doc.department_id), None)
+                    dept_name = dept.name if dept else "General"
+                    await knowledge_graph.index_document(
+                        db=db, document_id=doc.id, title=doc.title,
+                        file_type=doc.file_type, department_name=dept_name,
+                        uploader_email=uploader_email
+                    )
+
+                stats_after = await knowledge_graph.get_graph_stats(db)
+                logger.info(
+                    f"[KnowledgeGraph] Dynamic seeding complete. "
+                    f"Entities: {stats_after['total_entities']}, "
+                    f"Relationships: {stats_after['total_relationships']}"
+                )
+    except Exception as e:
+        logger.error(f"[KnowledgeGraph] Error during startup indexing: {e}")
+
+
 class DynamicCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         origin = request.headers.get("Origin")
-        
+
         # Handle preflight (OPTIONS) requests
         if request.method == "OPTIONS" and origin:
             is_allowed = False
@@ -39,7 +115,7 @@ class DynamicCORSMiddleware(BaseHTTPMiddleware):
                 is_allowed = True
             elif origin in settings.BACKEND_CORS_ORIGINS:
                 is_allowed = True
-                
+
             if is_allowed:
                 headers = {
                     "Access-Control-Allow-Origin": origin,
@@ -49,7 +125,7 @@ class DynamicCORSMiddleware(BaseHTTPMiddleware):
                     "Access-Control-Max-Age": "600",
                 }
                 return Response(content="OK", media_type="text/plain", headers=headers)
-        
+
         response = await call_next(request)
         if origin:
             is_allowed = False
@@ -59,7 +135,7 @@ class DynamicCORSMiddleware(BaseHTTPMiddleware):
                 is_allowed = True
             elif origin in settings.BACKEND_CORS_ORIGINS:
                 is_allowed = True
-                
+
             if is_allowed:
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -67,12 +143,14 @@ class DynamicCORSMiddleware(BaseHTTPMiddleware):
                 response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
         return response
 
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Enterprise Knowledge & Operations Copilot — Multi-Agent AI, RAG, Knowledge Graphs, Analytics",
     version="2.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
 # ──── Global Exception Handlers ────
@@ -113,66 +191,6 @@ app.include_router(knowledge_graph_routes.router, prefix=settings.API_V1_STR)
 app.include_router(ws.router, prefix=settings.API_V1_STR)
 
 
-@app.on_event("startup")
-def startup_populate_knowledge_graph():
-    try:
-        from .database import SessionLocal
-        from .models import User, Department, Document
-        from .knowledge_graph import knowledge_graph
-        
-        # Check if knowledge graph is empty
-        stats = knowledge_graph.get_graph_stats()
-        if stats.get("total_entities", 0) == 0:
-            logger.info("[KnowledgeGraph] Graph is empty. Populating from existing database records...")
-            db = SessionLocal()
-            try:
-                # 1. Index Departments
-                depts = db.query(Department).all()
-                for d in depts:
-                    knowledge_graph.add_entity(f"dept_{d.name}", "Department", {"name": d.name})
-                    
-                # 2. Index Users & Manager relationships
-                users = db.query(User).all()
-                user_map = {u.id: u for u in users}
-                for u in users:
-                    user_node = f"user_{u.email}"
-                    knowledge_graph.add_entity(user_node, "User", {"email": u.email, "name": u.full_name or u.email, "role": u.role})
-                    
-                    # Link to department
-                    if u.department_id:
-                        dept = next((d for d in depts if d.id == u.department_id), None)
-                        if dept:
-                            knowledge_graph.add_relationship(user_node, f"dept_{dept.name}", "member_of")
-                    
-                    # Link to manager
-                    if u.manager_id and u.manager_id in user_map:
-                        manager = user_map[u.manager_id]
-                        knowledge_graph.add_relationship(user_node, f"user_{manager.email}", "reports_to")
-                
-                # 3. Index Documents
-                docs = db.query(Document).all()
-                for doc in docs:
-                    uploader = user_map.get(doc.uploaded_by)
-                    uploader_email = uploader.email if uploader else "admin@processpilot.ai"
-                    
-                    dept = next((d for d in depts if d.id == doc.department_id), None)
-                    dept_name = dept.name if dept else "General"
-                    
-                    knowledge_graph.index_document(
-                        document_id=doc.id,
-                        title=doc.title,
-                        file_type=doc.file_type,
-                        department_name=dept_name,
-                        uploader_email=uploader_email
-                    )
-            finally:
-                db.close()
-                
-            logger.info(f"[KnowledgeGraph] Dynamic seeding complete. Entities: {knowledge_graph.get_graph_stats()['total_entities']}, Relationships: {knowledge_graph.get_graph_stats()['total_relationships']}")
-    except Exception as e:
-        logger.error(f"[KnowledgeGraph] Error during startup indexing: {e}")
-
-
 @app.get("/")
 def root():
     return {
@@ -191,7 +209,7 @@ def health_check():
 
 
 @app.get("/health/detailed")
-def health_detailed():
+async def health_detailed():
     """
     Detailed system health — checks all subsystems.
     Returns status of: API, database, vector store, knowledge graph.
@@ -206,17 +224,18 @@ def health_detailed():
     # Check database
     try:
         from .database import SessionLocal
-        db = SessionLocal()
         from .models import Document
-        doc_count = db.query(Document).count()
-        db.close()
+        from sqlalchemy import func
+        async with SessionLocal() as db:
+            r = await db.execute(select(func.count(Document.id)))
+            doc_count = r.scalar()
         status_report["database"] = "ok"
         status_report["database_documents"] = doc_count
     except Exception as e:
         status_report["database"] = "error"
         logger.error(f"Health check DB error: {e}")
 
-    # Check ChromaDB vector store
+    # Check vector store
     try:
         from .vectorstore import vector_store_manager
         count = vector_store_manager.collection.count()

@@ -56,9 +56,11 @@ export default function SettingsPage() {
   useEffect(() => {
     api.getSettings()
       .then(s => {
-        setGeminiKey(s.gemini_api_key || '');
-        setGroqKey(s.groq_api_key || '');
-        setOpenaiKey(s.openai_api_key || '');
+        // API keys are now masked — backend returns *_set booleans
+        // Only show placeholder if a key is already configured
+        setGeminiKey(s.gemini_api_key_set ? '••••••••' : '');
+        setGroqKey(s.groq_api_key_set ? '••••••••' : '');
+        setOpenaiKey(s.openai_api_key_set ? '••••••••' : '');
         setLlmProvider(s.llm_provider || 'simulation');
         setSystemPrompt(s.system_prompt || '');
       })
@@ -70,7 +72,9 @@ export default function SettingsPage() {
     setSaving(true);
     setSaved(false);
     try {
-      await api.updateSettings(geminiKey, groqKey, openaiKey, llmProvider, systemPrompt);
+      // Don't send placeholder dots as actual keys — send null to keep existing value
+      const cleanKey = (k) => (k === '••••••••' ? null : k);
+      await api.updateSettings(cleanKey(geminiKey), cleanKey(groqKey), cleanKey(openaiKey), llmProvider, systemPrompt);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
