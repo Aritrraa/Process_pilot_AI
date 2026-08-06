@@ -457,13 +457,13 @@ class CEOAgent:
                         "title": t.title,
                         "description": t.description,
                         "status": t.status,
-                        "created_at": t.created_at.strftime("%Y-%m-%d")
+                        "created_at": t.created_at.strftime('%Y-%m-%d')
                     })
                     context_chunks.append(
                         f"[Task Ticket: {t.title}]\n"
                         f"Description: {t.description or 'No description'}\n"
                         f"Status: {t.status}\n"
-                        f"Created At: {t.created_at.strftime("%Y-%m-%d")}"
+                        f"Created At: {t.created_at.strftime('%Y-%m-%d')}"
                     )
             
             # Deduplicate sources

@@ -26,3 +26,5 @@ pinecone-client==3.2.2
 rank-bm25>=0.2.2
 aiofiles==23.2.1
 tenacity==8.2.3
+
+supabase
