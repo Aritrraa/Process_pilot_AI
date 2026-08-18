@@ -143,7 +143,7 @@ class AuditLog(Base):
     resource_id = Column(Integer, nullable=True)
     details = Column(Text, nullable=True)
     ip_address = Column(String, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.datetime.utcnow())
 
 
 class LLMUsage(Base):
@@ -157,7 +157,7 @@ class LLMUsage(Base):
     input_tokens = Column(Integer, default=0)
     output_tokens = Column(Integer, default=0)
     estimated_cost = Column(String, default="0.0")
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.datetime.utcnow())
 
 
 class Conversation(Base):
@@ -167,9 +167,9 @@ class Conversation(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     title = Column(String, default="New Conversation")
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc),
-                        onupdate=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.datetime.utcnow())
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.utcnow(),
+                        onupdate=lambda: datetime.datetime.utcnow())
 
     messages = relationship("ConversationMessage", back_populates="conversation", cascade="all, delete-orphan")
 
@@ -184,7 +184,7 @@ class ConversationMessage(Base):
     content = Column(Text)
     sources_json = Column(JSON, nullable=True)
     steps_json = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.datetime.utcnow())
 
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -198,7 +198,7 @@ class PromptVersion(Base):
     version = Column(Integer, default=1)
     is_active = Column(Integer, default=1) # 1 for active, 0 for inactive
     system_prompt = Column(Text)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.datetime.utcnow())
 
 
 class AIFailure(Base):
@@ -211,7 +211,7 @@ class AIFailure(Base):
     response = Column(Text)
     feedback_type = Column(String) # 'thumbs_down', 'hallucination', etc.
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.datetime.utcnow())
 
 class DocumentEmbedding(Base):
     """PostgreSQL native pgvector storage for document chunks."""
@@ -240,7 +240,7 @@ class KGNode(Base):
     id = Column(String, primary_key=True)  # e.g. "user_alice@co.com", "doc_42"
     entity_type = Column(String, index=True)  # User, Document, Department, Technology
     properties = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.datetime.utcnow())
 
     # Relationships: outgoing and incoming edges
     outgoing_edges = relationship("KGEdge", foreign_keys="KGEdge.source_id", back_populates="source_node", cascade="all, delete-orphan")
@@ -256,7 +256,7 @@ class KGEdge(Base):
     target_id = Column(String, ForeignKey("kg_nodes.id", ondelete="CASCADE"), index=True)
     relationship_type = Column(String, index=True)  # member_of, reports_to, uploaded, belongs_to, covers
     properties = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.datetime.utcnow())
 
     source_node = relationship("KGNode", foreign_keys=[source_id], back_populates="outgoing_edges")
     target_node = relationship("KGNode", foreign_keys=[target_id], back_populates="incoming_edges")
