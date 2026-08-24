@@ -37,10 +37,11 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(Base.metadata.create_all)
     logger.info("[Startup] Database schema ready.")
 
-    # ── Populate knowledge graph from existing records ─────────────────────
-    await _populate_knowledge_graph()
+    # ── Populate knowledge graph in background without blocking port binding ──
+    asyncio.create_task(_safe_populate_knowledge_graph())
 
     yield  # App is now running
+
 
     # ── Shutdown ───────────────────────────────────────────────────────────
     logger.info("[Shutdown] Disposing DB engine connections...")
@@ -48,8 +49,9 @@ async def lifespan(app: FastAPI):
     logger.info("[Shutdown] Cleanup complete.")
 
 
-async def _populate_knowledge_graph():
-    """Async knowledge graph seeding on first startup."""
+async def _safe_populate_knowledge_graph():
+    """Async knowledge graph seeding — runs in background after server starts."""
+    await asyncio.sleep(3)  # Give server a moment to fully bind port
     try:
         from .database import SessionLocal
         from .models import User, Department, Document
@@ -99,7 +101,7 @@ async def _populate_knowledge_graph():
                     f"Relationships: {stats_after['total_relationships']}"
                 )
     except Exception as e:
-        logger.error(f"[KnowledgeGraph] Error during startup indexing: {e}")
+        logger.error(f"[KnowledgeGraph] Background startup indexing failed (non-fatal): {e}")
 
 
 class DynamicCORSMiddleware(BaseHTTPMiddleware):
