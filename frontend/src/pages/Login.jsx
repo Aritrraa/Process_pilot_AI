@@ -16,10 +16,10 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [coldBootMsg, setColdBootMsg] = useState('');
 
   if (user) return <Navigate to="/dashboard" replace />;
 
-  const [coldBootMsg, setColdBootMsg] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
