@@ -1335,6 +1335,8 @@ def seed():
             print(f"  ✗ Login failed for {email}! Status: {r.status_code}, Response: {r.text}")
             
     admin_token = tokens.get("admin@processpilot.ai")
+    if not admin_token and len(tokens) > 0:
+        admin_token = list(tokens.values())[0]  # Fallback to any valid token
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
     print("  ✓ Authenticated all accounts")
 
