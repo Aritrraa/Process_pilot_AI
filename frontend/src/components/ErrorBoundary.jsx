@@ -13,13 +13,33 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // You can also log the error to an error reporting service here
     console.error("ErrorBoundary caught an error:", error, errorInfo);
     this.setState({ errorInfo });
+
+    // Auto-reload once if this is a stale chunk error (happens after new deployments)
+    const isChunkError = (
+      error?.name === 'ChunkLoadError' ||
+      error?.message?.includes('Loading chunk') ||
+      error?.message?.includes('Failed to fetch dynamically imported module') ||
+      error?.message?.includes('Importing a module script failed') ||
+      error?.message?.includes('error loading dynamically imported module')
+    );
+    if (isChunkError) {
+      const reloadKey = 'chunk_reload_attempted';
+      if (!sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, '1');
+        // Clear caches then reload
+        if ('caches' in window) {
+          caches.keys().then(names => names.forEach(name => caches.delete(name)));
+        }
+        window.location.reload(true);
+      }
+    }
   }
 
   handleReload = () => {
-    window.location.reload();
+    sessionStorage.removeItem('chunk_reload_attempted');
+    window.location.reload(true);
   };
 
   render() {
@@ -38,14 +58,17 @@ class ErrorBoundary extends React.Component {
         }}>
           <AlertCircle size={64} style={{ marginBottom: 24, color: 'var(--color-error, #ef4444)' }} />
           <h1 style={{ fontSize: 32, fontWeight: 700, marginBottom: 16 }}>Something went wrong.</h1>
-          <p style={{ fontSize: 16, opacity: 0.7, marginBottom: 32, maxWidth: 500 }}>
-            An unexpected error occurred in the application interface. Our team has been notified.
+          <p style={{ fontSize: 16, opacity: 0.7, marginBottom: 12, maxWidth: 500 }}>
+            This usually happens after a new update is deployed. Clearing your browser cache will fix it.
+          </p>
+          <p style={{ fontSize: 13, opacity: 0.5, marginBottom: 32, maxWidth: 500 }}>
+            Error: {this.state.error?.message || 'Unknown error'}
           </p>
           
           <button 
             onClick={this.handleReload}
             style={{
-              padding: '12px 24px', 
+              padding: '12px 32px', 
               background: 'var(--accent-primary, #7c3aed)',
               color: 'white', 
               borderRadius: 8, 
@@ -59,7 +82,7 @@ class ErrorBoundary extends React.Component {
             }}
           >
             <RefreshCw size={18} />
-            Reload Application
+            Clear Cache &amp; Reload
           </button>
           
           {process.env.NODE_ENV === 'development' && this.state.error && (

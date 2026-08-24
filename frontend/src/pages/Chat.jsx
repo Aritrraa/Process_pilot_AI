@@ -131,7 +131,7 @@ export default function Chat() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ message: msg, scope: activeScope, stream: true })
+        body: JSON.stringify({ query: msg, scope: activeScope, stream: true })
       });
 
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
