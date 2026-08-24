@@ -233,14 +233,35 @@ export default function Tasks() {
                           </div>
                         )
                       )}
-                      <div className="task-card-meta">
+                      <div className="task-card-meta" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10 }}>
                           <Calendar size={9} style={{ display: 'inline', marginRight: 3, verticalAlign: -1 }} />
                           {new Date(task.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </span>
-                        <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, fontFamily: 'Archivo, sans-serif' }}>
-                          → {cfg.nextLabel}
-                        </span>
+                        
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <span 
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if(window.confirm('Delete this task?')) {
+                                try {
+                                  await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/tasks/${task.id}`, {
+                                    method: 'DELETE',
+                                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                                  });
+                                  window.location.reload();
+                                } catch (err) { alert('Failed to delete'); }
+                              }
+                            }}
+                            style={{ cursor: 'pointer', color: 'var(--color-error)' }}
+                            title="Delete Task"
+                          >
+                            🗑️
+                          </span>
+                          <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, fontFamily: 'Archivo, sans-serif' }}>
+                            → {cfg.nextLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   ))}
