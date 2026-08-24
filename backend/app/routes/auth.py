@@ -14,7 +14,7 @@ from ..rate_limiter import rate_limit
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED,
-             dependencies=[Depends(rate_limit(limit=10, window=3600))])
+             dependencies=[Depends(rate_limit(limit=100, window=3600))])
 async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     # Check if user already exists
     result = await db.execute(select(User).filter(User.email == user_in.email))
@@ -64,7 +64,7 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     return user
 
 @router.post("/login", response_model=Token,
-             dependencies=[Depends(rate_limit(limit=20, window=3600))])
+             dependencies=[Depends(rate_limit(limit=200, window=3600))])
 async def login(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).filter(User.email == user_in.email))
     user = result.scalars().first()

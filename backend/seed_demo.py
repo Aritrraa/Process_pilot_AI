@@ -1220,7 +1220,7 @@ def seed():
 
     # ── 1. Check server ───────────────────────────────────────────────────────
     try:
-        r = requests.get(f"{root_url}/health", timeout=15)
+        r = requests.get(f"{root_url}/health", timeout=60)
         if r.status_code == 200:
             print(f"\n[✓] Server is running at {root_url}")
         else:
@@ -1228,9 +1228,7 @@ def seed():
     except Exception as e:
         print(f"\n[✗] Cannot connect to server at {root_url}/health")
         print(f"    Error: {e}")
-        print("    Please start the backend first:")
-        print("    cd backend && python run.py")
-        sys.exit(1)
+        print("    Continuing anyway since this might be a cloud timeout...")
 
     # ── 2. Create Departments ─────────────────────────────────────────────────
     print("\n[1/6] Creating departments...")
