@@ -368,12 +368,11 @@ class LLMClient:
         )
     
     def _simulate_stream(self, user_message: str):
-        """Simulate a streaming response word by word."""
+        """Simulate a streaming response word by word (no sleep - safe for async context)."""
         text = self._simulate(user_message)
         words = text.split(" ")
         for i, word in enumerate(words):
             yield word + (" " if i < len(words) - 1 else "")
-            time.sleep(0.02)
     
     def _calculate_cost(self, provider: str, input_tokens: int, output_tokens: int) -> float:
         costs = self.COST_PER_1K.get(provider, self.COST_PER_1K["simulation"])

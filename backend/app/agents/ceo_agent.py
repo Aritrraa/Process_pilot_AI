@@ -690,154 +690,169 @@ class CEOAgent:
         Re-uses the context gathering from the normal pipeline, but streams the LLM completion.
         """
         import json
+        import asyncio
         from ..llm_client import llm_client
 
-        # Get context (same as process_query but optimized for stream setup)
-        r_us = await db.execute(select(UserSetting).filter(UserSetting.user_id == user.id))
-        user_settings = r_us.scalars().first()
-        api_key = None
-        llm_provider = "simulation"
-        system_prompt = None
-        if user_settings:
-            llm_provider = user_settings.llm_provider or "simulation"
-            system_prompt = user_settings.system_prompt
-            if llm_provider == "gemini": api_key = user_settings.gemini_api_key
-            elif llm_provider == "openai": api_key = user_settings.openai_api_key
-            elif llm_provider == "groq": api_key = user_settings.groq_api_key
-
-        # Memory
-        r_mem = await db.execute(select(Memory).filter(Memory.user_id == user.id))
-        memories = r_mem.scalars().all()
-        user_memories = "\n".join([f"- {m.key}: {m.value}" for m in memories])
-        
-        steps = []
-        
-        # Scope + Dept isolation
-        dept_id = None if user.role == "Admin" else user.department_id
-        
-        # Run synchronous ChromaDB search in a thread pool to avoid blocking the event loop
-        import asyncio
         try:
-            search_results = await asyncio.to_thread(
-                self.search_agent.execute, query, dept_id, api_key, llm_provider
-            )
-            steps.append({"agent": "SearchAgent", "action": "Queried Vector DB for context", "result": "Success"})
-        except Exception as search_err:
-            logger.warning(f"[SearchAgent] Failed (likely empty vectorstore): {search_err}")
-            search_results = []
-        
-        try:
-            incident_results = await self.incident_agent.execute(query, db)
-            if incident_results:
-                steps.append({"agent": "IncidentAgent", "action": "Matched semantic incident tickets", "result": "Success"})
-        except Exception as inc_err:
-            logger.warning(f"[IncidentAgent] Failed: {inc_err}")
-            incident_results = []
-            
-        try:
-            graph_results = await self.graph_agent.execute(query, db)
-            if graph_results:
-                steps.append({"agent": "GraphAgent", "action": "Queried organizational knowledge graph", "result": "Success"})
-        except Exception as graph_err:
-            logger.warning(f"[GraphAgent] Failed: {graph_err}")
-            graph_results = []
-        
-        # Classify query intent for streaming path
-        q_lower = query.lower()
-        if any(w in q_lower for w in ["compare", "difference", "differences", "versus", " vs "]):
-            intent = "comparison"
-        elif any(w in q_lower for w in ["sop", "procedure", "how to", "step by step", "guide"]):
-            intent = "sop"
-        else:
-            intent = "general"
+            # Get context (same as process_query but optimized for stream setup)
+            r_us = await db.execute(select(UserSetting).filter(UserSetting.user_id == user.id))
+            user_settings = r_us.scalars().first()
+            api_key = None
+            llm_provider = "simulation"
+            system_prompt = None
+            if user_settings:
+                llm_provider = user_settings.llm_provider or "simulation"
+                system_prompt = user_settings.system_prompt
+                if llm_provider == "gemini": api_key = user_settings.gemini_api_key
+                elif llm_provider == "openai": api_key = user_settings.openai_api_key
+                elif llm_provider == "groq": api_key = user_settings.groq_api_key
 
-        comparison_results = ""
-        if intent == "comparison":
-            comparison_results = await self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
-            steps.append({"agent": "ComparisonAgent", "action": "Executed document comparison", "result": "Success"})
-            
-        context_chunks = [res["document"] for res in search_results]
-        if intent == "comparison" and comparison_results:
-            context_chunks.append(f"[Document Comparison Report]\n{comparison_results}")
+            # Memory
+            r_mem = await db.execute(select(Memory).filter(Memory.user_id == user.id))
+            memories = r_mem.scalars().all()
+            user_memories = "\n".join([f"- {m.key}: {m.value}" for m in memories])
 
-        sources = list(set([res["metadata"].get("file_name", "Unknown File") for res in search_results]))
-        
-        from ..analytics import get_system_analytics
-        analytics_data = await get_system_analytics(db, user)
-        analytics_summary = []
-        analytics_summary.append("System & Team Analytics Overview:")
-        analytics_summary.append(f"- Documentation Health Score: {analytics_data.get('documentation_health')}%")
-        analytics_summary.append(f"- Task Status Distribution: {analytics_data.get('task_status')}")
-        analytics_info = "\n".join(analytics_summary)
-        directory_info = await self._get_org_directory(db, user)
-        
-        r_t = await db.execute(select(Task).filter(Task.assigned_to == user.id))
-        user_tasks = r_t.scalars().all()
-        user_tasks_summary = [f"- {t.title} [{t.status}]" for t in user_tasks] if user_tasks else ["No tasks"]
-        user_tasks_info = "\n".join(user_tasks_summary)
-        
-        conversation_history = await self._build_conversation_history(db, user)
+            steps = []
 
-        sop_needed = "sop" in query.lower() or "procedure" in query.lower() or "how to" in query.lower()
-        if sop_needed:
-            prompt = (
-                "You are an expert Operations SOP writer.\n"
-                f"Query: {query}\n\n"
-                f"Context:\n" + "\n---\n".join(context_chunks) + "\n\n"
-                "Create a clean, formatted Markdown document with sections: 'Overview', 'Prerequisites', 'Step-by-Step Procedure', 'Safety/Verification'."
-            )
-        else:
-            prompt = (
-                "You are ProcessPilot AI, an Enterprise Operations Copilot.\n"
-                "Synthesize an answer for the user query using the retrieved knowledge, incident tickets, past memories, organizational directory, system/team analytics, and the user's specific assigned task list.\n"
-                f"User Details: {user.email} (Role: {user.role})\n"
-                f"{directory_info}\n"
-                f"Assigned Tasks:\n{user_tasks_info}\n"
-                f"Analytics:\n{analytics_info}\n"
-                f"Memories:\n{user_memories}\n"
-                f"Recent Conversation History:\n{conversation_history}\n"
-                f"Context:\n" + "\n---\n".join(context_chunks) + "\n"
-                f"Incidents: {incident_results}\n"
-                f"Query: {query}\n"
-            )
-            
-        if system_prompt:
-            prompt = f"System Instruction: {system_prompt}\n\n{prompt}"
+            # Scope + Dept isolation
+            dept_id = None if user.role == "Admin" else user.department_id
 
-        # Yield initial metadata (sources, incidents) so UI can show them immediately
-        init_data = json.dumps({
-            "type": "metadata",
-            "sources": sources,
-            "incidents": incident_results,
-            "steps": steps
-        })
-        yield f"data: {init_data}\n\n"
+            # Run synchronous ChromaDB search in a thread pool to avoid blocking the event loop
+            try:
+                search_results = await asyncio.to_thread(
+                    self.search_agent.execute, query, dept_id, api_key, llm_provider
+                )
+                steps.append({"agent": "SearchAgent", "action": "Queried Vector DB for context", "result": "Success"})
+            except Exception as search_err:
+                logger.warning(f"[SearchAgent] Failed (likely empty vectorstore): {search_err}")
+                search_results = []
 
-        # Stream LLM tokens
-        full_answer = ""
-        async for chunk in llm_client.stream(
-            provider=llm_provider, 
-            api_key=api_key, 
-            system_prompt=system_prompt or "You are an Enterprise AI.", 
-            user_message=prompt, 
-            db=db, 
-            user_id=user.id
-        ):
-            full_answer += chunk
-            chunk_data = json.dumps({"type": "chunk", "content": chunk})
-            yield f"data: {chunk_data}\n\n"
+            try:
+                incident_results = await self.incident_agent.execute(query, db)
+                if incident_results:
+                    steps.append({"agent": "IncidentAgent", "action": "Matched semantic incident tickets", "result": "Success"})
+            except Exception as inc_err:
+                logger.warning(f"[IncidentAgent] Failed: {inc_err}")
+                incident_results = []
 
-        # End of stream
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            try:
+                graph_results = await self.graph_agent.execute(query, db)
+                if graph_results:
+                    steps.append({"agent": "GraphAgent", "action": "Queried organizational knowledge graph", "result": "Success"})
+            except Exception as graph_err:
+                logger.warning(f"[GraphAgent] Failed: {graph_err}")
+                graph_results = []
 
-        # Save log asynchronously (in the background, but since we are yielding, we can just save it here at the end)
-        try:
-            steps.append({"agent": "CEOAgent", "action": f"Synthesized response via {llm_provider}", "result": "Success"})
-            agent_log = AgentLog(user_id=user.id, query=query, response=full_answer, agent_steps=steps)
-            db.add(agent_log)
-            await db.commit()
-        except Exception:
-            pass
+            # Classify query intent for streaming path
+            q_lower = query.lower()
+            if any(w in q_lower for w in ["compare", "difference", "differences", "versus", " vs "]):
+                intent = "comparison"
+            elif any(w in q_lower for w in ["sop", "procedure", "how to", "step by step", "guide"]):
+                intent = "sop"
+            else:
+                intent = "general"
+
+            comparison_results = ""
+            if intent == "comparison":
+                comparison_results = await self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
+                steps.append({"agent": "ComparisonAgent", "action": "Executed document comparison", "result": "Success"})
+
+            context_chunks = [res["document"] for res in search_results]
+            if intent == "comparison" and comparison_results:
+                context_chunks.append(f"[Document Comparison Report]\n{comparison_results}")
+
+            sources = list(set([res["metadata"].get("file_name", "Unknown File") for res in search_results]))
+
+            try:
+                from ..analytics import get_system_analytics
+                analytics_data = await get_system_analytics(db, user)
+                analytics_summary = [
+                    "System & Team Analytics Overview:",
+                    f"- Documentation Health Score: {analytics_data.get('documentation_health')}%",
+                    f"- Task Status Distribution: {analytics_data.get('task_status')}",
+                ]
+                analytics_info = "\n".join(analytics_summary)
+            except Exception:
+                analytics_info = "Analytics unavailable."
+
+            try:
+                directory_info = await self._get_org_directory(db, user)
+            except Exception:
+                directory_info = ""
+
+            r_t = await db.execute(select(Task).filter(Task.assigned_to == user.id))
+            user_tasks = r_t.scalars().all()
+            user_tasks_summary = [f"- {t.title} [{t.status}]" for t in user_tasks] if user_tasks else ["No tasks"]
+            user_tasks_info = "\n".join(user_tasks_summary)
+
+            conversation_history = await self._build_conversation_history(db, user)
+
+            sop_needed = "sop" in query.lower() or "procedure" in query.lower() or "how to" in query.lower()
+            if sop_needed:
+                prompt = (
+                    "You are an expert Operations SOP writer.\n"
+                    f"Query: {query}\n\n"
+                    f"Context:\n" + "\n---\n".join(context_chunks) + "\n\n"
+                    "Create a clean, formatted Markdown document with sections: 'Overview', 'Prerequisites', 'Step-by-Step Procedure', 'Safety/Verification'."
+                )
+            else:
+                prompt = (
+                    "You are ProcessPilot AI, an Enterprise Operations Copilot.\n"
+                    "Synthesize an answer for the user query using the retrieved knowledge, incident tickets, past memories, organizational directory, system/team analytics, and the user's specific assigned task list.\n"
+                    f"User Details: {user.email} (Role: {user.role})\n"
+                    f"{directory_info}\n"
+                    f"Assigned Tasks:\n{user_tasks_info}\n"
+                    f"Analytics:\n{analytics_info}\n"
+                    f"Memories:\n{user_memories}\n"
+                    f"Recent Conversation History:\n{conversation_history}\n"
+                    f"Context:\n" + "\n---\n".join(context_chunks) + "\n"
+                    f"Incidents: {incident_results}\n"
+                    f"Query: {query}\n"
+                )
+
+            if system_prompt:
+                prompt = f"System Instruction: {system_prompt}\n\n{prompt}"
+
+            # Yield initial metadata (sources, incidents) so UI can show them immediately
+            init_data = json.dumps({
+                "type": "metadata",
+                "sources": sources,
+                "incidents": incident_results,
+                "steps": steps
+            })
+            yield f"data: {init_data}\n\n"
+
+            # Stream LLM tokens
+            full_answer = ""
+            async for chunk in llm_client.stream(
+                provider=llm_provider,
+                api_key=api_key,
+                system_prompt=system_prompt or "You are an Enterprise AI.",
+                user_message=prompt,
+                db=db,
+                user_id=user.id
+            ):
+                full_answer += chunk
+                chunk_data = json.dumps({"type": "chunk", "content": chunk})
+                yield f"data: {chunk_data}\n\n"
+
+            # End of stream
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+            # Save log
+            try:
+                steps.append({"agent": "CEOAgent", "action": f"Synthesized response via {llm_provider}", "result": "Success"})
+                agent_log = AgentLog(user_id=user.id, query=query, response=full_answer, agent_steps=steps)
+                db.add(agent_log)
+                await db.commit()
+            except Exception:
+                pass
+
+        except Exception as e:
+            logger.error(f"[CEOAgent] process_query_stream crashed: {e}", exc_info=True)
+            err_msg = json.dumps({"type": "chunk", "content": f"[AI Copilot Error] {str(e)}. Please try again."})
+            yield f"data: {err_msg}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
 ceo_agent = CEOAgent()
 process_query = ceo_agent.process_query

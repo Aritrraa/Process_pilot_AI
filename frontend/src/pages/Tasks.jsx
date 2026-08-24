@@ -49,18 +49,43 @@ export default function Tasks() {
 
   const cycleStatus = async (task) => {
     const next = STATUS[task.status]?.next || 'Pending';
+    // Optimistic update: change UI immediately
+    queryClient.setQueryData(['tasks', page], (old = []) =>
+      old.map(t => t.id === task.id ? { ...t, status: next } : t)
+    );
     try {
       await api.updateTask(task.id, next);
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    } catch (err) { alert(`Failed to update status: ${err.message}`); }
+    } catch (err) {
+      // Rollback on failure
+      queryClient.setQueryData(['tasks', page], (old = []) =>
+        old.map(t => t.id === task.id ? { ...t, status: task.status } : t)
+      );
+      alert(`Failed to update status: ${err.message}`);
+    }
   };
 
   const handleReassign = async (task, newAssigneeId) => {
     const assigneeId = newAssigneeId ? parseInt(newAssigneeId) : null;
+    const newMember = team.find(m => m.id === assigneeId);
+    // Optimistic update: change UI immediately without waiting for server
+    queryClient.setQueryData(['tasks', page], (old = []) =>
+      old.map(t => t.id === task.id
+        ? { ...t, assigned_to: assigneeId, assignee_name: newMember ? (newMember.full_name || newMember.email) : null }
+        : t
+      )
+    );
     try {
       await api.updateTask(task.id, undefined, assigneeId);
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    } catch (err) { alert(`Failed to reassign task: ${err.message}`); }
+    } catch (err) {
+      // Rollback on failure
+      queryClient.setQueryData(['tasks', page], (old = []) =>
+        old.map(t => t.id === task.id
+          ? { ...t, assigned_to: task.assigned_to, assignee_name: task.assignee_name }
+          : t
+        )
+      );
+      alert(`Failed to reassign task: ${err.message}`);
+    }
   };
 
   const safeTasks = Array.isArray(tasks) ? tasks : [];
