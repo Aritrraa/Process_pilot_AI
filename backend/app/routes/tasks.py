@@ -160,36 +160,45 @@ async def update_task_status(
             except Exception:
                 pass  # Non-critical
 
-    if task_update.title is not None:
-        task.title = task_update.title
-    if task_update.status is not None:
-        task.status = task_update.status
+    update_data = task_update.model_dump(exclude_unset=True)
+
+    if "title" in update_data:
+        task.title = update_data["title"]
         
-    if task_update.assigned_to is not None:
-        # Verify the target user exists
-        result = await db.execute(select(User).filter(User.id == task_update.assigned_to))
-        new_assignee = result.scalars().first()
-        if not new_assignee:
-            raise HTTPException(status_code=404, detail="New assignee user not found")
-            
-        # Role-based assignment validation
-        if current_user.role in ("Manager", "Director"):
-            if task_update.assigned_to != current_user.id and new_assignee.manager_id != current_user.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Managers can only assign tasks to their team members"
-                )
-        elif current_user.role == "Employee":
-            if task_update.assigned_to != current_user.id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Employees can only assign tasks to themselves"
-                )
-        # Reset status to Pending (To Do) when assignee changes, unless a specific status was also provided
-        if task_update.status is None and task.assigned_to != task_update.assigned_to:
-            task.status = "Pending"
-        task.assigned_to = task_update.assigned_to
-        task.manager_id = new_assignee.manager_id if new_assignee.role == "Employee" else new_assignee.id
+    if "status" in update_data:
+        task.status = update_data["status"]
+        
+    if "assigned_to" in update_data:
+        new_assigned_to = update_data["assigned_to"]
+        if new_assigned_to is not None:
+            # Verify the target user exists
+            result = await db.execute(select(User).filter(User.id == new_assigned_to))
+            new_assignee = result.scalars().first()
+            if not new_assignee:
+                raise HTTPException(status_code=404, detail="New assignee user not found")
+                
+            # Role-based assignment validation
+            if current_user.role in ("Manager", "Director"):
+                if new_assigned_to != current_user.id and new_assignee.manager_id != current_user.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Managers can only assign tasks to their team members"
+                    )
+            elif current_user.role == "Employee":
+                if new_assigned_to != current_user.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Employees can only assign tasks to themselves"
+                    )
+            # Reset status to Pending (To Do) when assignee changes, unless a specific status was also provided
+            if "status" not in update_data and task.assigned_to != new_assigned_to:
+                task.status = "Pending"
+            task.assigned_to = new_assigned_to
+            task.manager_id = new_assignee.manager_id if new_assignee.role == "Employee" else new_assignee.id
+        else:
+            # Explicitly unassigning
+            task.assigned_to = None
+            task.manager_id = None
 
     await db.commit()
     await db.refresh(task)

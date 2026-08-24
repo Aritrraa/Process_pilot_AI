@@ -58,7 +58,7 @@ export default function Tasks() {
   const handleReassign = async (task, newAssigneeId) => {
     const assigneeId = newAssigneeId ? parseInt(newAssigneeId) : null;
     try {
-      await api.updateTask(task.id, null, assigneeId);
+      await api.updateTask(task.id, undefined, assigneeId);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     } catch (err) { alert(`Failed to reassign task: ${err.message}`); }
   };

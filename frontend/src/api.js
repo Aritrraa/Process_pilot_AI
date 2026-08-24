@@ -105,11 +105,11 @@ export const api = {
       body: JSON.stringify({ title, description, assigned_to: assignedTo, document_id: documentId, meeting_id: meetingId }) 
     }).then(handleResponse),
 
-  updateTask: (id, status = null, assignedTo = null, title = null) => {
+  updateTask: (id, status = undefined, assignedTo = undefined, title = undefined) => {
     const body = {};
-    if (status !== null) body.status = status;
-    if (assignedTo !== null) body.assigned_to = assignedTo;
-    if (title !== null) body.title = title;
+    if (status !== undefined) body.status = status;
+    if (assignedTo !== undefined) body.assigned_to = assignedTo;
+    if (title !== undefined) body.title = title;
     return fetch(`${BASE_URL}/tasks/${id}`, { 
       method: 'PATCH', 
       headers: getHeaders(), 
