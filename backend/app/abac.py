@@ -40,8 +40,8 @@ async def evaluate_policy(subject: User, resource_type: str, resource_obj: any, 
             # Employees can update status of tasks assigned to them
             if task.assigned_to == subject.id:
                 return True
-            # Managers can update status/reassign tasks of their reports or themselves
-            if subject.role == "Manager":
+            # Managers/Directors can update status/reassign tasks of their reports or themselves
+            if subject.role in ("Manager", "Director"):
                 if task.assigned_to == subject.id:
                     return True
                 result = await db.execute(select(User).filter(User.id == task.assigned_to))
@@ -49,8 +49,8 @@ async def evaluate_policy(subject: User, resource_type: str, resource_obj: any, 
                 return assignee and assignee.manager_id == subject.id
             return False
         elif action == "delete":
-            # Only managers can delete tasks assigned to their reports/themselves
-            if subject.role == "Manager":
+            # Only managers/directors can delete tasks assigned to their reports/themselves
+            if subject.role in ("Manager", "Director"):
                 if task.assigned_to == subject.id:
                     return True
                 result = await db.execute(select(User).filter(User.id == task.assigned_to))

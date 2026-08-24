@@ -52,7 +52,15 @@ export default function Tasks() {
     try {
       await api.updateTask(task.id, next);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    } catch (err) { alert(err.message); }
+    } catch (err) { alert(`Failed to update status: ${err.message}`); }
+  };
+
+  const handleReassign = async (task, newAssigneeId) => {
+    const assigneeId = newAssigneeId ? parseInt(newAssigneeId) : null;
+    try {
+      await api.updateTask(task.id, null, assigneeId);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    } catch (err) { alert(`Failed to reassign task: ${err.message}`); }
   };
 
   const safeTasks = Array.isArray(tasks) ? tasks : [];
@@ -197,11 +205,7 @@ export default function Tasks() {
                           <select
                             value={task.assigned_to || ''}
                             onChange={async (e) => {
-                              const newAssignee = e.target.value ? parseInt(e.target.value) : null;
-                              try {
-                                  await api.updateTask(task.id, null, newAssignee);
-                                  load();
-                                } catch (err) { alert(err.message); }
+                              handleReassign(task, e.target.value);
                             }}
                             className="form-select"
                             style={{ padding: '4px 8px', fontSize: 11, height: 'auto', width: '100%', background: 'var(--color-paper)', borderColor: 'var(--color-graphite)' }}
