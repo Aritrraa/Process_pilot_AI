@@ -190,9 +190,6 @@ async def update_task_status(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Employees can only assign tasks to themselves"
                     )
-            # Reset status to Pending (To Do) when assignee changes, unless a specific status was also provided
-            if "status" not in update_data and task.assigned_to != new_assigned_to:
-                task.status = "Pending"
             task.assigned_to = new_assigned_to
             task.manager_id = new_assignee.manager_id if new_assignee.role == "Employee" else new_assignee.id
         else:

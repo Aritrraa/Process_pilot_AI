@@ -1,4 +1,5 @@
 import os
+import asyncio
 import datetime
 import json
 from typing import List, Dict, Any, Optional
@@ -476,13 +477,25 @@ class CEOAgent:
         else:
             # Apply role check/department isolation
             dept_id = None if user.role == "Admin" else user.department_id
-            search_results = self.search_agent.execute(query, dept_id, api_key, llm_provider)
+            try:
+                search_results = await asyncio.to_thread(
+                    self.search_agent.execute, query, dept_id, api_key, llm_provider
+                )
+            except Exception as search_err:
+                logger.warning(f"[SearchAgent] Failed: {search_err}")
+                search_results = []
             
             # Run Incident Agent (DB metadata lookup)
-            incident_results = await self.incident_agent.execute(query, db)
+            try:
+                incident_results = await self.incident_agent.execute(query, db)
+            except Exception:
+                incident_results = []
             
             # Run Graph Agent (Knowledge Graph Graph-RAG lookup)
-            graph_results = await self.graph_agent.execute(query, db)
+            try:
+                graph_results = await self.graph_agent.execute(query, db)
+            except Exception:
+                graph_results = []
             
             # Classify query intent: drives routing to SOP, Comparison, or standard Q&A paths
             # (intent already computed above; block kept for inline documentation only)
@@ -701,16 +714,33 @@ class CEOAgent:
         
         # Scope + Dept isolation
         dept_id = None if user.role == "Admin" else user.department_id
-        search_results = self.search_agent.execute(query, dept_id, api_key, llm_provider)
-        steps.append({"agent": "SearchAgent", "action": "Queried Vector DB for context", "result": "Success"})
         
-        incident_results = await self.incident_agent.execute(query, db)
-        if incident_results:
-            steps.append({"agent": "IncidentAgent", "action": "Matched semantic incident tickets", "result": "Success"})
+        # Run synchronous ChromaDB search in a thread pool to avoid blocking the event loop
+        import asyncio
+        try:
+            search_results = await asyncio.to_thread(
+                self.search_agent.execute, query, dept_id, api_key, llm_provider
+            )
+            steps.append({"agent": "SearchAgent", "action": "Queried Vector DB for context", "result": "Success"})
+        except Exception as search_err:
+            logger.warning(f"[SearchAgent] Failed (likely empty vectorstore): {search_err}")
+            search_results = []
+        
+        try:
+            incident_results = await self.incident_agent.execute(query, db)
+            if incident_results:
+                steps.append({"agent": "IncidentAgent", "action": "Matched semantic incident tickets", "result": "Success"})
+        except Exception as inc_err:
+            logger.warning(f"[IncidentAgent] Failed: {inc_err}")
+            incident_results = []
             
-        graph_results = await self.graph_agent.execute(query, db)
-        if graph_results:
-            steps.append({"agent": "GraphAgent", "action": "Queried organizational knowledge graph", "result": "Success"})
+        try:
+            graph_results = await self.graph_agent.execute(query, db)
+            if graph_results:
+                steps.append({"agent": "GraphAgent", "action": "Queried organizational knowledge graph", "result": "Success"})
+        except Exception as graph_err:
+            logger.warning(f"[GraphAgent] Failed: {graph_err}")
+            graph_results = []
         
         # Classify query intent for streaming path
         q_lower = query.lower()
