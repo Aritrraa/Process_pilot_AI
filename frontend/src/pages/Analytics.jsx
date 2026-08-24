@@ -197,7 +197,7 @@ export default function Analytics() {
   };
 
   if (loading) return <div className="spinner" />;
-  if (!data) return <div className="empty-state">Failed to load analytics data</div>;
+  if (!data) return <div className="empty-state" style={{ padding: 40 }}>Failed to load analytics data. Please refresh.</div>;
 
   const barColors = ['var(--color-blue)', 'var(--color-green)', 'var(--color-gold)', 'var(--color-teal)', 'var(--text-secondary)'];
   const docTypes = Object.entries(data.docs_by_type || {});
@@ -208,6 +208,8 @@ export default function Analytics() {
 
   const isManager = data.team_details?.role === 'Manager' || data.team_details?.role === 'Director';
   const isAdmin = data.team_details?.role === 'Admin';
+
+  const llmUsage = data.llm_usage || { total_cost: 0, total_input_tokens: 0, total_output_tokens: 0, by_provider: {} };
 
   const statCards = [
     { label: 'Total Documents', value: data.stats?.total_documents || 0, icon: FileText, color: 'blue' },
@@ -336,7 +338,7 @@ export default function Analytics() {
           </div>
 
           {/* LLM Cost & Usage */}
-          {data.llm_usage && (
+          {(llmUsage.total_cost > 0 || Object.keys(llmUsage.by_provider).length > 0 || llmUsage.total_input_tokens > 0) && (
             <div className="card" style={{ marginBottom: 16 }}>
               <div className="card-header">
                 <div className="card-title"><Cpu size={15} /> LLM Token Usage &amp; Costs</div>
@@ -345,15 +347,15 @@ export default function Analytics() {
                 <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: 200, background: 'var(--bg-secondary)', padding: 16, borderRadius: 8 }}>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Total Estimated Cost</div>
-                    <div style={{ fontSize: 24, fontWeight: 600, color: 'var(--color-success)' }}>${data.llm_usage.total_cost.toFixed(4)}</div>
+                    <div style={{ fontSize: 24, fontWeight: 600, color: 'var(--color-success)' }}>${llmUsage.total_cost.toFixed(4)}</div>
                   </div>
                   <div style={{ flex: 1, minWidth: 200, background: 'var(--bg-secondary)', padding: 16, borderRadius: 8 }}>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Total Input Tokens</div>
-                    <div style={{ fontSize: 24, fontWeight: 600 }}>{data.llm_usage.total_input_tokens.toLocaleString()}</div>
+                    <div style={{ fontSize: 24, fontWeight: 600 }}>{llmUsage.total_input_tokens.toLocaleString()}</div>
                   </div>
                   <div style={{ flex: 1, minWidth: 200, background: 'var(--bg-secondary)', padding: 16, borderRadius: 8 }}>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Total Output Tokens</div>
-                    <div style={{ fontSize: 24, fontWeight: 600 }}>{data.llm_usage.total_output_tokens.toLocaleString()}</div>
+                    <div style={{ fontSize: 24, fontWeight: 600 }}>{llmUsage.total_output_tokens.toLocaleString()}</div>
                   </div>
                 </div>
 
@@ -368,14 +370,14 @@ export default function Analytics() {
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(data.llm_usage.by_provider).map(([provider, details]) => (
+                      {Object.entries(llmUsage.by_provider).map(([provider, details]) => (
                         <tr key={provider}>
                           <td><span className="badge badge-neutral">{provider}</span></td>
                           <td>{details.calls}</td>
                           <td style={{ color: 'var(--color-success)', fontWeight: 500 }}>${details.cost.toFixed(4)}</td>
                         </tr>
                       ))}
-                      {Object.keys(data.llm_usage.by_provider).length === 0 && (
+                      {Object.keys(llmUsage.by_provider).length === 0 && (
                         <tr>
                           <td colSpan="3" style={{ textAlign: 'center', opacity: 0.5 }}>No LLM usage recorded yet.</td>
                         </tr>

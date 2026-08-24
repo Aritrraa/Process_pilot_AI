@@ -147,19 +147,133 @@ class KnowledgeGraph:
         }
 
     async def get_full_graph(self, db: AsyncSession) -> Dict[str, Any]:
-        """Return the full graph as nodes and edges for visualization (limited for safety)."""
-        r_n = await db.execute(select(KGNode).limit(500))
-        nodes = r_n.scalars().all()
-        r_e = await db.execute(select(KGEdge).limit(2000))
-        edges = r_e.scalars().all()
+        """
+        Build the full graph for visualization directly from the live database.
+        This approach always shows up-to-date connections even if KG seeding is incomplete.
+        Includes:
+          - Departments
+          - Users (with member_of dept, reports_to manager)
+          - Documents (with uploaded_by user, belongs_to dept)
+          - Tasks (with assigned_to user, linked to document/meeting)
+        """
+        from .models import User, Department, Document, Task
 
-        node_list = [{"id": n.id, "type": n.entity_type, **(n.properties or {})} for n in nodes]
-        edge_list = [{
-            "source": e.source_id,
-            "target": e.target_id,
-            "relationship": e.relationship_type
-        } for e in edges]
+        node_list = []
+        edge_list = []
+        node_ids_seen = set()
 
+        # ── 1. Load Departments ──────────────────────────────────────────
+        r_depts = await db.execute(select(Department))
+        depts = r_depts.scalars().all()
+        dept_map = {d.id: d for d in depts}
+        for d in depts:
+            nid = f"dept_{d.id}"
+            node_list.append({"id": nid, "type": "Department", "name": d.name, "description": d.description or ""})
+            node_ids_seen.add(nid)
+
+        # ── 2. Load Users ────────────────────────────────────────────────
+        r_users = await db.execute(select(User))
+        users = r_users.scalars().all()
+        user_map = {u.id: u for u in users}
+        for u in users:
+            nid = f"user_{u.id}"
+            node_list.append({
+                "id": nid,
+                "type": "User",
+                "name": u.full_name or u.email,
+                "email": u.email,
+                "role": u.role,
+            })
+            node_ids_seen.add(nid)
+
+            # User → Department
+            if u.department_id and f"dept_{u.department_id}" in node_ids_seen:
+                edge_list.append({
+                    "source": nid,
+                    "target": f"dept_{u.department_id}",
+                    "relationship": "member_of"
+                })
+
+            # User → Manager (reports_to)
+            if u.manager_id and u.manager_id != u.id:
+                edge_list.append({
+                    "source": nid,
+                    "target": f"user_{u.manager_id}",
+                    "relationship": "reports_to"
+                })
+
+        # ── 3. Load Documents ────────────────────────────────────────────
+        r_docs = await db.execute(select(Document).limit(200))
+        docs = r_docs.scalars().all()
+        for doc in docs:
+            nid = f"doc_{doc.id}"
+            node_list.append({
+                "id": nid,
+                "type": "Document",
+                "title": doc.title,
+                "name": doc.title,
+                "file_type": doc.file_type or "unknown",
+                "ingestion_status": doc.ingestion_status or "pending",
+            })
+            node_ids_seen.add(nid)
+
+            # User uploaded Document
+            if doc.uploaded_by and f"user_{doc.uploaded_by}" in node_ids_seen:
+                edge_list.append({
+                    "source": f"user_{doc.uploaded_by}",
+                    "target": nid,
+                    "relationship": "uploaded"
+                })
+
+            # Document belongs_to Department
+            if doc.department_id and f"dept_{doc.department_id}" in node_ids_seen:
+                edge_list.append({
+                    "source": nid,
+                    "target": f"dept_{doc.department_id}",
+                    "relationship": "belongs_to"
+                })
+
+        # ── 4. Load Tasks ────────────────────────────────────────────────
+        r_tasks = await db.execute(select(Task).limit(300))
+        tasks = r_tasks.scalars().all()
+        for t in tasks:
+            nid = f"task_{t.id}"
+            node_list.append({
+                "id": nid,
+                "type": "Task",
+                "title": t.title,
+                "name": t.title,
+                "status": t.status or "Pending",
+            })
+            node_ids_seen.add(nid)
+
+            # User assigned_to Task
+            if t.assigned_to and f"user_{t.assigned_to}" in node_ids_seen:
+                edge_list.append({
+                    "source": f"user_{t.assigned_to}",
+                    "target": nid,
+                    "relationship": "assigned_to"
+                })
+
+            # Manager manages Task
+            if t.manager_id and t.manager_id != t.assigned_to and f"user_{t.manager_id}" in node_ids_seen:
+                edge_list.append({
+                    "source": f"user_{t.manager_id}",
+                    "target": nid,
+                    "relationship": "manages"
+                })
+
+            # Task linked_to Document
+            if t.document_id and f"doc_{t.document_id}" in node_ids_seen:
+                edge_list.append({
+                    "source": nid,
+                    "target": f"doc_{t.document_id}",
+                    "relationship": "linked_to"
+                })
+
+        logger.info(
+            f"[KnowledgeGraph] get_full_graph built: {len(node_list)} nodes, {len(edge_list)} edges"
+        )
         return {"nodes": node_list, "edges": edge_list}
 
     async def index_document(self, db: AsyncSession, document_id: int, title: str, file_type: str, department_name: str, uploader_email: str):
