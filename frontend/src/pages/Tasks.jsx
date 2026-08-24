@@ -201,10 +201,15 @@ export default function Tasks() {
                         <div className="task-card-desc">{task.description}</div>
                       )}
                       {user && (user.role === 'Admin' || user.role === 'Manager' || user.role === 'Director') ? (
-                        <div style={{ marginBottom: 10 }} onClick={e => e.stopPropagation()}>
+                        <div 
+                          style={{ marginBottom: 10 }} 
+                          onClick={e => e.stopPropagation()}
+                          onPointerDown={e => e.stopPropagation()}
+                        >
                           <select
                             value={task.assigned_to || ''}
                             onChange={async (e) => {
+                              e.stopPropagation();
                               handleReassign(task, e.target.value);
                             }}
                             className="form-select"

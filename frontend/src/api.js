@@ -85,7 +85,7 @@ export const api = {
 
   // Chat
   chat: (message, scope = null) =>
-    fetch(`${BASE_URL}/chat/`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ message, scope }) }).then(handleResponse),
+    fetch(`${BASE_URL}/chat/`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ query: message, scope }) }).then(handleResponse),
 
   // Meetings
   getMeetings: (skip = 0, limit = 50) =>
