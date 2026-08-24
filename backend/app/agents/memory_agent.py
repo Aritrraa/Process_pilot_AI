@@ -1,22 +1,25 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from ..models import Memory
 
 class MemoryAgent:
-    def get_memories(self, user_id: int, query: str, db: Session) -> str:
+    async def get_memories(self, user_id: int, query: str, db: AsyncSession) -> str:
         # Get past conversation memories
-        memories = db.query(Memory).filter(Memory.user_id == user_id).all()
+        r = await db.execute(select(Memory).filter(Memory.user_id == user_id))
+        memories = r.scalars().all()
         if not memories:
             return "No previous long-term memories stored."
         
         memory_str = "\n".join([f"- {m.key}: {m.value}" for m in memories])
         return memory_str
 
-    def save_memory(self, user_id: int, key: str, value: str, db: Session):
+    async def save_memory(self, user_id: int, key: str, value: str, db: AsyncSession):
         # Update or create memory
-        existing = db.query(Memory).filter(Memory.user_id == user_id, Memory.key == key).first()
+        r = await db.execute(select(Memory).filter(Memory.user_id == user_id, Memory.key == key))
+        existing = r.scalars().first()
         if existing:
             existing.value = value
         else:
             new_memory = Memory(user_id=user_id, key=key, value=value)
             db.add(new_memory)
-        db.commit()
+        await db.commit()

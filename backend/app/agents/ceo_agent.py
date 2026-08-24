@@ -384,8 +384,12 @@ class CEOAgent:
         if not api_key:
             llm_provider = "simulation"
         
-        # Step 2: Retrieve long term memory for context
-        user_memories = self.memory_agent.get_memories(user.id, query, db)
+        # Step 1: Memory (Fast retrieval of previous user preferences/context)
+        try:
+            user_memories = await self.memory_agent.get_memories(user.id, query, db)
+        except Exception as err:
+            logger.warning(f"Memory Agent Error: {err}")
+            user_memories = "No memory available."
 
         # Classify query intent (defined early so both scope and non-scope paths can use it)
         _q = query.lower()
@@ -671,9 +675,12 @@ class CEOAgent:
                 steps.append({"agent": "CEOAgent", "action": f"Synthesized response via {llm_provider}", "result": "Success"})
                     
         # Step 7: Update Long-Term Memory if the query contains important personal settings or context
-        if "remember" in query.lower() or "my name is" in query.lower() or "deploy" in query.lower():
-            # Extract key/value via a simple rule or save query directly
-            self.memory_agent.save_memory(user.id, f"Query_Context_{datetime.datetime.now().strftime('%M%S')}", query, db)
+        if "remember" in query.lower() or "my name is" in query.lower() or "deploy" in query.lower() or len(query) > 20:
+            import datetime
+            try:
+                await self.memory_agent.save_memory(user.id, f"Query_Context_{datetime.datetime.now().strftime('%M%S')}", query, db)
+            except Exception:
+                pass
             steps.append({"agent": "MemoryAgent", "action": "Stored key-value context to long-term memory", "result": "Success"})
             
         # Log this agent session

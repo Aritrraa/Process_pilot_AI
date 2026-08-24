@@ -8,7 +8,7 @@ from ..database import get_db
 from ..models import User, AIFailure
 from ..schemas import ChatQuery
 from ..auth import get_current_user
-from ..agents import ceo_agent
+from ..agents import process_query, process_query_stream
 
 router = APIRouter(prefix="/chat", tags=["AI Chat"])
 
@@ -31,10 +31,10 @@ async def chat_with_ai(
     """
     if getattr(query, 'stream', True):  # Default to streaming
         return StreamingResponse(
-            ceo_agent.process_query_stream(current_user, query.query, db, scope=query.scope),
+            process_query_stream(current_user, query.query, db, scope=query.scope),
             media_type="text/event-stream"
         )
-    return await ceo_agent.process_query(current_user, query.query, db, scope=query.scope)
+    return await process_query(current_user, query.query, db, scope=query.scope)
 
 
 @router.post("/feedback")
