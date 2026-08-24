@@ -211,6 +211,19 @@ class CEOAgent:
         return "\n".join(history_chunks)
 
     async def process_query(self, user: User, query: str, db: AsyncSession, scope: Optional[List[str]] = None) -> Dict[str, Any]:
+        try:
+            return await self._process_query_internal(user, query, db, scope)
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            return {
+                "answer": f"System Error: {str(e)}\n\nTraceback:\n{tb}",
+                "sources": [],
+                "incidents": [],
+                "steps": []
+            }
+
+    async def _process_query_internal(self, user: User, query: str, db: AsyncSession, scope: Optional[List[str]] = None) -> Dict[str, Any]:
         # Initialize or retrieve user session for agent loop tracking
         if user.id not in ACTIVE_AGENT_SESSIONS:
             ACTIVE_AGENT_SESSIONS[user.id] = {
