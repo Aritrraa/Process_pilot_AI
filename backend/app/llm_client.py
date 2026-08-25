@@ -240,6 +240,13 @@ class LLMClient:
                 
             except Exception as e:
                 last_error = e
+                err_str = str(e).lower()
+                
+                # If authentication error, don't retry, and don't trip global circuit breaker
+                if "401" in err_str or "authentication" in err_str or "api_key" in err_str:
+                    yield f"\n\n**Error:** Invalid {provider.capitalize()} API Key. Please verify your API key in Settings."
+                    return
+
                 self._consecutive_failures += 1
                 self.total_usage["failures"] += 1
                 
@@ -258,10 +265,9 @@ class LLMClient:
             self._circuit_open = True
             logger.warning("Circuit breaker ACTIVATED: falling back to simulation mode")
             for c in self._simulate_stream(user_message): yield c
-            return
-            
-        yield f"\n\n[Error: LLM call failed after {max_retries} attempts. Last error: {str(last_error)}]"
-    
+        else:
+            yield f"\n\n**System Error:** LLM provider failed after {max_retries} attempts. Last error: {last_error}"
+
     async def _dispatch(self, provider: str, api_key: str, system_prompt: str, user_message: str) -> str:
         """Dispatch to the appropriate LLM provider."""
         if provider == "gemini":
