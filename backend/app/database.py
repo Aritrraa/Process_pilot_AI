@@ -27,6 +27,15 @@ engine = create_async_engine(
 
 SessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=AsyncSession, expire_on_commit=False)
 
+# Create a synchronous engine and sessionmaker for background threads (e.g. pgvector ingestion/search)
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+sync_db_url = settings.DATABASE_URL
+sync_connect_args = {"check_same_thread": False} if is_sqlite else {}
+sync_engine = create_engine(sync_db_url, connect_args=sync_connect_args)
+SyncSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+
 Base = declarative_base()
 
 # Dependency to get db session

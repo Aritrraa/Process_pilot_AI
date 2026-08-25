@@ -379,10 +379,14 @@ class QdrantVectorStore(BaseVectorStore):
             )
 
 class PGVectorStore(BaseVectorStore):
-    """Native PostgreSQL vector store using pgvector via SQLAlchemy."""
+    """Native PostgreSQL vector store using pgvector via SQLAlchemy.
+    
+    Uses a SYNCHRONOUS session because all methods run inside asyncio.to_thread
+    (background threads) — never directly on the async event loop.
+    """
     def __init__(self):
-        from .database import SessionLocal
-        self.SessionLocal = SessionLocal
+        from .database import SyncSessionLocal
+        self.SessionLocal = SyncSessionLocal
 
     def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]], api_key: Optional[str] = None, llm_provider: str = "simulation"):
         if not chunks: return
@@ -437,8 +441,6 @@ class PGVectorStore(BaseVectorStore):
             
             formatted_results = []
             for r in results:
-                # Calculate approximate cosine similarity from distance
-                # cosine_distance = 1 - cosine_similarity
                 distance = r.embedding.cosine_distance(query_embedding) if hasattr(r.embedding, 'cosine_distance') else 0.0
                 
                 formatted_results.append({

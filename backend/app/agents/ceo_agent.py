@@ -2,10 +2,13 @@ import os
 import asyncio
 import datetime
 import json
+import logging
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
+logger = logging.getLogger(__name__)
 
 from ..models import User, Document, DocumentChunk, Meeting, Task, Memory, AgentLog, UserSetting, PromptVersion
 
