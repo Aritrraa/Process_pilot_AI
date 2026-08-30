@@ -122,6 +122,10 @@ export default function Chat() {
       showSteps: false,
     }]);
 
+    // Abort controller for 90s timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
+
     try {
       const token = localStorage.getItem('token');
       const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -131,24 +135,29 @@ export default function Chat() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ query: msg, scope: activeScope, stream: true })
+        body: JSON.stringify({ query: msg, scope: activeScope, stream: true }),
+        signal: controller.signal,
       });
 
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
+      let leftover = '';
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         
-        const chunkStr = decoder.decode(value, { stream: true });
+        // Prepend any leftover from previous chunk to handle TCP boundary splits
+        const chunkStr = leftover + decoder.decode(value, { stream: true });
         const lines = chunkStr.split('\n');
+        // Last element may be an incomplete line — save for next iteration
+        leftover = lines.pop() || '';
         
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6);
+            const dataStr = line.slice(6).trim();
             if (!dataStr) continue;
             try {
               const data = JSON.parse(dataStr);
@@ -175,14 +184,30 @@ export default function Chat() {
           }
         }
       }
-    } catch (err) {
+
+      // If stream ended with empty content, show a fallback message
       setMessages(prev => {
         const newMsgs = [...prev];
-        newMsgs[newMsgs.length - 1].content = `**Error:** ${err.message}. Please check that the backend server is running.`;
+        const last = newMsgs[newMsgs.length - 1];
+        if (last && last.role === 'ai' && !last.content) {
+          last.content = '**No response received.** The AI took too long or encountered an error. Please try again.';
+          last.isError = true;
+        }
+        return newMsgs;
+      });
+
+    } catch (err) {
+      const errMsg = err.name === 'AbortError'
+        ? '**Request timed out** (90s). The AI is taking too long. Please try a shorter question or try again later.'
+        : `**Error:** ${err.message}. Please check that the backend server is running.`;
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        newMsgs[newMsgs.length - 1].content = errMsg;
         newMsgs[newMsgs.length - 1].isError = true;
         return newMsgs;
       });
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
       inputRef.current?.focus();
     }

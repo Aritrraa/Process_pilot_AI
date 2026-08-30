@@ -72,8 +72,10 @@ export default function SettingsPage() {
     setSaving(true);
     setSaved(false);
     try {
-      // Don't send placeholder dots as actual keys — send null to keep existing value
-      const cleanKey = (k) => (k === '••••••••' ? null : k);
+      // If the user didn't touch a key field (shows placeholder ••••••••),
+      // send undefined so the backend's `if ... is not None` guard leaves it untouched.
+      // If they cleared the field to empty string, send '' to explicitly clear it.
+      const cleanKey = (k) => (k === '••••••••' ? undefined : k);
       await api.updateSettings(cleanKey(geminiKey), cleanKey(groqKey), cleanKey(openaiKey), llmProvider, systemPrompt);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);

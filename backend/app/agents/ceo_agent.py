@@ -294,7 +294,7 @@ class CEOAgent:
                         )
                         db.add(new_task)
                         await db.commit()
-                        db.refresh(new_task)
+                        await db.refresh(new_task)
                         ans = (
                             f"✅ **Action Approved & Task Created Successfully!**\n"
                             f"- **Title**: {new_task.title}\n"
@@ -679,7 +679,6 @@ class CEOAgent:
                     
         # Step 7: Update Long-Term Memory if the query contains important personal settings or context
         if "remember" in query.lower() or "my name is" in query.lower() or "deploy" in query.lower() or len(query) > 20:
-            import datetime
             try:
                 await self.memory_agent.save_memory(user.id, f"Query_Context_{datetime.datetime.now().strftime('%M%S')}", query, db)
             except Exception:
@@ -862,14 +861,14 @@ class CEOAgent:
             # End of stream
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-            # Save log
+            # Save log (best-effort — DB session may be closed after streaming completes)
             try:
                 steps.append({"agent": "CEOAgent", "action": f"Synthesized response via {llm_provider}", "result": "Success"})
                 agent_log = AgentLog(user_id=user.id, query=query, response=full_answer, agent_steps=steps)
                 db.add(agent_log)
                 await db.commit()
-            except Exception:
-                pass
+            except Exception as log_err:
+                logger.warning(f"[CEOAgent] Post-stream log failed (non-fatal): {log_err}")
 
         except Exception as e:
             logger.error(f"[CEOAgent] process_query_stream crashed: {e}", exc_info=True)

@@ -32,7 +32,12 @@ async def chat_with_ai(
     if getattr(query, 'stream', True):  # Default to streaming
         return StreamingResponse(
             process_query_stream(current_user, query.query, db, scope=query.scope),
-            media_type="text/event-stream"
+            media_type="text/event-stream",
+            headers={
+                "X-Accel-Buffering": "no",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
         )
     return await process_query(current_user, query.query, db, scope=query.scope)
 

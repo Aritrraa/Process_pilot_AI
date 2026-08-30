@@ -44,8 +44,8 @@ class LLMClient:
     # ===== SEMANTIC ROUTER =====
     # Simple queries (short length, greetings) → cheap fast model
     # Complex queries (long, analytical) → powerful model
-    _CHEAP_MODEL = "llama-3.1-8b-instant"   # ~8x cheaper
-    _POWER_MODEL = "llama-3.3-70b-versatile" # full power
+    _CHEAP_MODEL = "llama-3.1-8b-instant"   # fast, free tier
+    _POWER_MODEL = "llama3-70b-8192"         # powerful, free tier (replaces deprecated llama-3.3-70b-versatile)
     _SIMPLE_KEYWORDS = {"hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "bye", "good morning", "good evening"}
 
     def _route_model(self, user_message: str) -> str:
@@ -146,7 +146,7 @@ class LLMClient:
                             estimated_cost=str(cost)
                         )
                         db.add(usage_record)
-                        db.commit()
+                        await db.commit()
                     except Exception as db_err:
                         logger.error(f"Failed to log LLM usage to DB: {db_err}")
                 
@@ -154,6 +154,13 @@ class LLMClient:
                 
             except Exception as e:
                 last_error = e
+                err_str = str(e).lower()
+
+                # Don't retry on auth/model errors — they won't recover with retries
+                if "401" in err_str or "404" in err_str or "authentication" in err_str or "api_key" in err_str or "does not exist" in err_str:
+                    logger.error(f"LLM call permanent error ({provider}): {e}")
+                    return f"Error: {str(e)}"
+
                 self._consecutive_failures += 1
                 self.total_usage["failures"] += 1
                 
@@ -232,7 +239,7 @@ class LLMClient:
                             estimated_cost=str(cost)
                         )
                         db.add(usage_record)
-                        db.commit()
+                        await db.commit()
                     except Exception as db_err:
                         logger.error(f"Failed to log LLM stream usage to DB: {db_err}")
                 
