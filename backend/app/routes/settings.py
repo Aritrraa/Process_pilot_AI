@@ -43,12 +43,14 @@ async def update_settings(
         setting = UserSetting(user_id=current_user.id)
         db.add(setting)
         
+    from app.crypto import encrypt_key
+    
     if settings_in.gemini_api_key is not None:
-        setting.gemini_api_key = settings_in.gemini_api_key
+        setting.gemini_api_key = encrypt_key(settings_in.gemini_api_key)
     if settings_in.groq_api_key is not None:
-        setting.groq_api_key = settings_in.groq_api_key
+        setting.groq_api_key = encrypt_key(settings_in.groq_api_key)
     if settings_in.openai_api_key is not None:
-        setting.openai_api_key = settings_in.openai_api_key
+        setting.openai_api_key = encrypt_key(settings_in.openai_api_key)
     if settings_in.llm_provider is not None:
         setting.llm_provider = settings_in.llm_provider
     if settings_in.system_prompt is not None:

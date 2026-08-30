@@ -41,4 +41,8 @@ Base = declarative_base()
 # Dependency to get db session
 async def get_db():
     async with SessionLocal() as db:
-        yield db
+        try:
+            yield db
+        except Exception:
+            await db.rollback()
+            raise

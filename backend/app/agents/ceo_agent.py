@@ -374,13 +374,14 @@ class CEOAgent:
         settings_record = r_set.scalars().first()
         system_prompt = settings_record.system_prompt if settings_record else None
         
+        from app.crypto import decrypt_key
         llm_provider = settings_record.llm_provider if settings_record else "simulation"
         if llm_provider == "gemini":
-            api_key = settings_record.gemini_api_key if settings_record else os.getenv("GEMINI_API_KEY")
+            api_key = decrypt_key(settings_record.gemini_api_key) if settings_record else os.getenv("GEMINI_API_KEY")
         elif llm_provider == "groq":
-            api_key = settings_record.groq_api_key if settings_record else os.getenv("GROQ_API_KEY")
+            api_key = decrypt_key(settings_record.groq_api_key) if settings_record else os.getenv("GROQ_API_KEY")
         elif llm_provider == "openai":
-            api_key = settings_record.openai_api_key if settings_record else os.getenv("OPENAI_API_KEY")
+            api_key = decrypt_key(settings_record.openai_api_key) if settings_record else os.getenv("OPENAI_API_KEY")
         else:
             api_key = None
             
@@ -723,11 +724,12 @@ class CEOAgent:
             llm_provider = "simulation"
             system_prompt = None
             if user_settings:
+                from app.crypto import decrypt_key
                 llm_provider = user_settings.llm_provider or "simulation"
                 system_prompt = user_settings.system_prompt
-                if llm_provider == "gemini": api_key = user_settings.gemini_api_key
-                elif llm_provider == "openai": api_key = user_settings.openai_api_key
-                elif llm_provider == "groq": api_key = user_settings.groq_api_key
+                if llm_provider == "gemini": api_key = decrypt_key(user_settings.gemini_api_key)
+                elif llm_provider == "openai": api_key = decrypt_key(user_settings.openai_api_key)
+                elif llm_provider == "groq": api_key = decrypt_key(user_settings.groq_api_key)
 
             # Memory
             r_mem = await db.execute(select(Memory).filter(Memory.user_id == user.id))
