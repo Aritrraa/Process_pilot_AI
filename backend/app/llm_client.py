@@ -310,14 +310,37 @@ class LLMClient:
         from groq import AsyncGroq
         client = AsyncGroq(api_key=api_key)
         model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            max_tokens=2048
-        )
+        
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                max_tokens=2048
+            )
+        except Exception as e:
+            err_str = str(e).lower()
+            if "does not exist" in err_str or "model_not_found" in err_str or "decommissioned" in err_str:
+                logger.warning(f"Groq model {model} not found/decommissioned. Fetching available models...")
+                models = await client.models.list()
+                available = [m.id for m in models.data if "whisper" not in m.id.lower()]
+                if not available:
+                    raise e
+                model = available[0]
+                logger.info(f"Fallback to dynamic Groq model: {model}")
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message}
+                    ],
+                    max_tokens=2048
+                )
+            else:
+                raise e
+                
         return response.choices[0].message.content
     
     async def _dispatch_stream(self, provider: str, api_key: str, system_prompt: str, user_message: str):
@@ -359,15 +382,39 @@ class LLMClient:
         from groq import AsyncGroq
         client = AsyncGroq(api_key=api_key)
         model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
-        response = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message}
-            ],
-            max_tokens=2048,
-            stream=True
-        )
+        
+        try:
+            response = await client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                max_tokens=2048,
+                stream=True
+            )
+        except Exception as e:
+            err_str = str(e).lower()
+            if "does not exist" in err_str or "model_not_found" in err_str or "decommissioned" in err_str:
+                logger.warning(f"Groq model {model} not found/decommissioned in stream. Fetching available models...")
+                models = await client.models.list()
+                available = [m.id for m in models.data if "whisper" not in m.id.lower()]
+                if not available:
+                    raise e
+                model = available[0]
+                logger.info(f"Fallback to dynamic Groq model: {model}")
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_message}
+                    ],
+                    max_tokens=2048,
+                    stream=True
+                )
+            else:
+                raise e
+                
         async for chunk in response:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
