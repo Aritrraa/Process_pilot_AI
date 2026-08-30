@@ -45,7 +45,7 @@ class LLMClient:
     # Simple queries (short length, greetings) → cheap fast model
     # Complex queries (long, analytical) → powerful model
     _CHEAP_MODEL = "llama-3.1-8b-instant"   # fast, free tier
-    _POWER_MODEL = "mixtral-8x7b-32768"      # highly stable, free tier (fallback since Llama 70b versions are deprecated/restricted)
+    _POWER_MODEL = "llama-3.1-8b-instant"   # fallback to same model to guarantee it works (Groq decommissioned the other free ones)
     _SIMPLE_KEYWORDS = {"hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "bye", "good morning", "good evening"}
 
     def _route_model(self, user_message: str) -> str:
