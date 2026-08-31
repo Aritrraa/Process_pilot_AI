@@ -103,7 +103,16 @@ async def get_system_analytics(db: AsyncSession, current_user: User = None) -> D
 
     # Latest logs
     latest_logs = []
-    sorted_logs = sorted(scoped_logs, key=lambda l: l.timestamp or datetime.datetime.min, reverse=True)[:10]
+    
+    def get_sort_key(log):
+        if not log.timestamp:
+            return datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+        if log.timestamp.tzinfo is None:
+            return log.timestamp.replace(tzinfo=datetime.timezone.utc)
+        return log.timestamp
+
+    sorted_logs = sorted(scoped_logs, key=get_sort_key, reverse=True)[:10]
+    
     r_all_users = await db.execute(select(User))
     user_map = {u.id: u for u in r_all_users.scalars().all()}
 
