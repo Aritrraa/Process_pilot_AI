@@ -128,19 +128,31 @@ def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[s
                 client = Groq(api_key=api_key)
                 try:
                     response = client.chat.completions.create(
-                        model="llama-3.1-8b-instant",
+                        model="llama-3.3-70b-versatile",
                         messages=[{"role": "user", "content": prompt}]
                     )
                 except Exception as e:
                     err_str = str(e).lower()
                     if "does not exist" in err_str or "model_not_found" in err_str or "decommissioned" in err_str:
                         models = client.models.list()
+                        # Filter out audio/vision models if possible
                         available = [m.id for m in models.data if "whisper" not in m.id.lower()]
-                        if not available: raise e
-                        response = client.chat.completions.create(
-                            model=available[0],
-                            messages=[{"role": "user", "content": prompt}]
-                        )
+                        
+                        last_err = e
+                        response = None
+                        for model_id in available:
+                            try:
+                                response = client.chat.completions.create(
+                                    model=model_id,
+                                    messages=[{"role": "user", "content": prompt}]
+                                )
+                                break  # Success!
+                            except Exception as ex:
+                                last_err = ex
+                                continue
+                                
+                        if not response:
+                            raise last_err
                     else:
                         raise e
                 return response.choices[0].message.content

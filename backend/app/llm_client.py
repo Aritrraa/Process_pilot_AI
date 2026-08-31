@@ -326,18 +326,27 @@ class LLMClient:
                 logger.warning(f"Groq model {model} not found/decommissioned. Fetching available models...")
                 models = await client.models.list()
                 available = [m.id for m in models.data if "whisper" not in m.id.lower()]
-                if not available:
-                    raise e
-                model = available[0]
-                logger.info(f"Fallback to dynamic Groq model: {model}")
-                response = await client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message}
-                    ],
-                    max_tokens=2048
-                )
+                
+                last_err = e
+                response = None
+                for model_id in available:
+                    try:
+                        logger.info(f"Trying fallback Groq model: {model_id}")
+                        response = await client.chat.completions.create(
+                            model=model_id,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_message}
+                            ],
+                            max_tokens=2048
+                        )
+                        break  # Success!
+                    except Exception as ex:
+                        last_err = ex
+                        continue
+                        
+                if not response:
+                    raise last_err
             else:
                 raise e
                 
@@ -399,19 +408,28 @@ class LLMClient:
                 logger.warning(f"Groq model {model} not found/decommissioned in stream. Fetching available models...")
                 models = await client.models.list()
                 available = [m.id for m in models.data if "whisper" not in m.id.lower()]
-                if not available:
-                    raise e
-                model = available[0]
-                logger.info(f"Fallback to dynamic Groq model: {model}")
-                response = await client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_message}
-                    ],
-                    max_tokens=2048,
-                    stream=True
-                )
+                
+                last_err = e
+                response = None
+                for model_id in available:
+                    try:
+                        logger.info(f"Trying fallback Groq model: {model_id}")
+                        response = await client.chat.completions.create(
+                            model=model_id,
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                {"role": "user", "content": user_message}
+                            ],
+                            max_tokens=2048,
+                            stream=True
+                        )
+                        break  # Success!
+                    except Exception as ex:
+                        last_err = ex
+                        continue
+                        
+                if not response:
+                    raise last_err
             else:
                 raise e
                 
