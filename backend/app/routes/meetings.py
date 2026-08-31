@@ -183,13 +183,12 @@ def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[s
     
     try:
         clean_text = raw_text.strip()
-        if clean_text.startswith("```"):
-            lines = clean_text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            clean_text = "\n".join(lines).strip()
+        
+        # Robustly extract JSON object ignoring conversational filler or markdown
+        import re
+        json_match = re.search(r'\{.*\}', clean_text, re.DOTALL)
+        if json_match:
+            clean_text = json_match.group(0)
             
         data = json.loads(clean_text)
         summary = data.get("summary", "")
