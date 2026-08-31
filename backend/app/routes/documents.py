@@ -165,16 +165,17 @@ async def upload_document(
         )
 
     # Fetch user settings async
+    from ..crypto import decrypt_key
     result = await db.execute(select(UserSetting).filter(UserSetting.user_id == current_user.id))
     settings_record = result.scalars().first()
     llm_provider = settings_record.llm_provider if settings_record else "simulation"
     api_key: Optional[str] = None
     if llm_provider == "gemini" and settings_record:
-        api_key = settings_record.gemini_api_key or os.getenv("GEMINI_API_KEY")
+        api_key = decrypt_key(settings_record.gemini_api_key) or os.getenv("GEMINI_API_KEY")
     elif llm_provider == "groq" and settings_record:
-        api_key = settings_record.groq_api_key or os.getenv("GROQ_API_KEY")
+        api_key = decrypt_key(settings_record.groq_api_key) or os.getenv("GROQ_API_KEY")
     elif llm_provider == "openai" and settings_record:
-        api_key = settings_record.openai_api_key or os.getenv("OPENAI_API_KEY")
+        api_key = decrypt_key(settings_record.openai_api_key) or os.getenv("OPENAI_API_KEY")
     if not api_key:
         llm_provider = "simulation"
 

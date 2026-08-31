@@ -20,17 +20,21 @@ router = APIRouter(prefix="/meetings", tags=["Meetings"])
 
 async def _get_llm_settings(user: User, db: AsyncSession):
     """Helper: Returns (api_key, llm_provider) for the current user."""
+    from ..crypto import decrypt_key
+    
     result = await db.execute(select(UserSetting).filter(UserSetting.user_id == user.id))
     settings_record = result.scalars().first()
     provider = settings_record.llm_provider if settings_record else "simulation"
+    
     if provider == "gemini":
-        key = settings_record.gemini_api_key if settings_record else os.getenv("GEMINI_API_KEY")
+        key = decrypt_key(settings_record.gemini_api_key) if settings_record else os.getenv("GEMINI_API_KEY")
     elif provider == "groq":
-        key = settings_record.groq_api_key if settings_record else os.getenv("GROQ_API_KEY")
+        key = decrypt_key(settings_record.groq_api_key) if settings_record else os.getenv("GROQ_API_KEY")
     elif provider == "openai":
-        key = settings_record.openai_api_key if settings_record else os.getenv("OPENAI_API_KEY")
+        key = decrypt_key(settings_record.openai_api_key) if settings_record else os.getenv("OPENAI_API_KEY")
     else:
         key = None
+        
     if not key:
         provider = "simulation"
     return key, provider
@@ -114,7 +118,7 @@ def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[s
     raw_text = ""
     try:
         if provider == "gemini":
-            @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+            @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
             def _call_gemini():
                 import google.generativeai as genai
                 genai.configure(api_key=api_key)
@@ -122,7 +126,7 @@ def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[s
                 return model.generate_content(prompt).text
             raw_text = _call_gemini()
         elif provider == "groq":
-            @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+            @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
             def _call_groq():
                 from groq import Groq
                 client = Groq(api_key=api_key)
@@ -158,7 +162,7 @@ def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[s
                 return response.choices[0].message.content
             raw_text = _call_groq()
         elif provider == "openai":
-            @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+            @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True)
             def _call_openai():
                 from openai import OpenAI
                 client = OpenAI(api_key=api_key)
