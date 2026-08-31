@@ -94,6 +94,9 @@ export const api = {
   createMeeting: (title, transcript, meetingLink = null) =>
     fetch(`${BASE_URL}/meetings/`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ title, transcript, meeting_link: meetingLink }) }).then(handleResponse),
 
+  deleteMeeting: (id) =>
+    fetch(`${BASE_URL}/meetings/${id}`, { method: 'DELETE', headers: getHeaders() }).then(handleResponse),
+
   // Tasks
   getTasks: (skip = 0, limit = 50) =>
     fetch(`${BASE_URL}/tasks/?skip=${skip}&limit=${limit}`, { headers: getHeaders() }).then(handleResponse),

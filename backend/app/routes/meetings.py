@@ -126,10 +126,23 @@ def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[s
             def _call_groq():
                 from groq import Groq
                 client = Groq(api_key=api_key)
-                response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=[{"role": "user", "content": prompt}]
-                )
+                try:
+                    response = client.chat.completions.create(
+                        model="llama-3.1-8b-instant",
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                except Exception as e:
+                    err_str = str(e).lower()
+                    if "does not exist" in err_str or "model_not_found" in err_str or "decommissioned" in err_str:
+                        models = client.models.list()
+                        available = [m.id for m in models.data if "whisper" not in m.id.lower()]
+                        if not available: raise e
+                        response = client.chat.completions.create(
+                            model=available[0],
+                            messages=[{"role": "user", "content": prompt}]
+                        )
+                    else:
+                        raise e
                 return response.choices[0].message.content
             raw_text = _call_groq()
         elif provider == "openai":

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import DOMPurify from 'dompurify';
 import { api } from '../api';
-import { Plus, ChevronDown, ChevronRight, ChevronLeft, Calendar, Clock, Users, FileText, Link as LinkIcon } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, ChevronLeft, Calendar, Clock, Users, FileText, Link as LinkIcon, Trash2 } from 'lucide-react';
 
 function renderInline(text) {
   if (!text) return null;
@@ -87,6 +87,17 @@ export default function Meetings() {
       alert(err.message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleDelete = async (id, e) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this meeting?')) return;
+    try {
+      await api.deleteMeeting(id);
+      queryClient.invalidateQueries({ queryKey: ['meetings'] });
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -269,7 +280,17 @@ CTO: Perfect. Action items summary: Sarah - DR plan by Friday. Engineering Lead 
                     </div>
                   </div>
                 </div>
-                {expanded === m.id ? <ChevronDown size={16} color="var(--text-muted)" /> : <ChevronRight size={16} color="var(--text-muted)" />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <button 
+                    onClick={(e) => handleDelete(m.id, e)} 
+                    className="btn btn-ghost btn-xs" 
+                    style={{ padding: '4px', color: 'var(--color-danger)' }}
+                    title="Delete meeting"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  {expanded === m.id ? <ChevronDown size={16} color="var(--text-muted)" /> : <ChevronRight size={16} color="var(--text-muted)" />}
+                </div>
               </div>
 
               {m.summary && (
