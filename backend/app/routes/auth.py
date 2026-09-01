@@ -135,10 +135,9 @@ async def list_all_users(
 
 @router.get("/managers", response_model=list[UserResponse])
 async def list_managers(
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """List all managers in the system (authenticated users only)."""
+    """List all managers in the system (public for registration)."""
     result = await db.execute(select(User).filter(User.role == "Manager"))
     return result.scalars().all()
 

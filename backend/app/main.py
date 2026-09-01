@@ -58,6 +58,17 @@ async def _safe_populate_knowledge_graph():
         from .knowledge_graph import knowledge_graph
 
         async with SessionLocal() as db:
+            # Auto-seed default departments if empty (critical for new DBs)
+            r_depts = await db.execute(select(Department))
+            depts = r_depts.scalars().all()
+            if not depts:
+                logger.info("[Startup] Seeding default departments...")
+                for d_name in ["HR", "Engineering", "Sales", "Marketing", "Product"]:
+                    db.add(Department(name=d_name, description=f"{d_name} Department"))
+                await db.commit()
+                r_depts = await db.execute(select(Department))
+                depts = r_depts.scalars().all()
+
             stats = await knowledge_graph.get_graph_stats(db)
             if stats.get("total_entities", 0) == 0:
                 logger.info("[KnowledgeGraph] Graph is empty. Populating from existing database records...")
