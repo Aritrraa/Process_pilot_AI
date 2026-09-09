@@ -163,7 +163,7 @@ body, p, input, select, textarea, button, .btn {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0, 0, 0, 0.4);
-  z-index: 999;
+  z-index: 1050;
   backdrop-filter: blur(2px);
 }
 .mobile-overlay.open {
@@ -1589,6 +1589,11 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
   margin-top: auto;
 }
 
+/* Mobile header bar — hidden on desktop */
+.mobile-header-bar {
+  display: none;
+}
+
 /* ===== RESPONSIVE MOBILE OPTIMIZATIONS (SCREENS < 768px) ===== */
 @media (max-width: 768px) {
   /* Unified Mobile Top Bar */
@@ -1599,7 +1604,7 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
     height: 56px;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-default);
-    z-index: 150;
+    z-index: 1100;
     align-items: center;
     justify-content: space-between;
     padding: 0 16px;
@@ -1640,7 +1645,7 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
   .sidebar {
     top: 56px;
     height: calc(100vh - 56px);
-    z-index: 140;
+    z-index: 1060;
     border-top: 1px solid var(--border-default);
   }
 
