@@ -35,6 +35,21 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         # Create all tables (idempotent)
         await conn.run_sync(Base.metadata.create_all)
+
+        # ── Supabase RLS: Lock down all tables from PostgREST public access ──
+        if is_postgres:
+            logger.info("[Startup] Enabling Row Level Security on all tables...")
+            all_tables = [
+                "departments", "users", "user_settings", "documents",
+                "document_chunks", "meetings", "tasks", "agent_logs",
+                "memories", "audit_logs", "llm_usage", "conversations",
+                "conversation_messages", "prompt_versions", "ai_failures",
+                "document_embeddings", "kg_nodes", "kg_edges",
+            ]
+            for tbl in all_tables:
+                await conn.execute(text(f'ALTER TABLE IF EXISTS public."{tbl}" ENABLE ROW LEVEL SECURITY;'))
+            logger.info("[Startup] RLS enabled on all tables.")
+
     logger.info("[Startup] Database schema ready.")
 
     # ── Populate knowledge graph in background without blocking port binding ──
