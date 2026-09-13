@@ -156,37 +156,60 @@ class ChromaVectorStore(BaseVectorStore):
         self._invalidate_bm25_cache(department_id)
 
     def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
-        collection = self._get_collection(department_id)
+        self._init_client()
+        
+        if department_id is not None:
+            collections = [self._get_collection(department_id)]
+        else:
+            # Query all collections for Admins (cross-departmental search)
+            collections = [self.client.get_collection(c.name) for c in self.client.list_collections()]
+            if not collections:
+                return []
+                
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)
             
-        results = collection.query(
-            query_embeddings=[query_embedding],
-            n_results=limit
-        )
-        
         formatted_results = []
-        if results and results['documents'] and results['documents'][0]:
-            for i in range(len(results['ids'][0])):
-                formatted_results.append({
-                    "id": results['ids'][0][i],
-                    "document": results['documents'][0][i],
-                    "metadata": results['metadatas'][0][i],
-                    "distance": results['distances'][0][i] if results.get('distances') else 0.0
-                })
-                
-        # --- BM25 Keyword Search ---
-        bm25, items = self._get_bm25_index(collection, department_id)
         keyword_results = []
-        if bm25:
-            tokenized_query = query.lower().split(" ")
-            bm25_scores = bm25.get_scores(tokenized_query)
-            # Get top 'limit' matches
-            top_n = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:limit]
-            for idx in top_n:
-                if bm25_scores[idx] > 0:
-                    keyword_results.append(items[idx])
-                    
+        
+        for collection in collections:
+            try:
+                results = collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=limit
+                )
+                
+                if results and results['documents'] and results['documents'][0]:
+                    for i in range(len(results['ids'][0])):
+                        formatted_results.append({
+                            "id": results['ids'][0][i],
+                            "document": results['documents'][0][i],
+                            "metadata": results['metadatas'][0][i],
+                            "distance": results['distances'][0][i] if results.get('distances') else 0.0
+                        })
+            except Exception:
+                pass
+                
+            try:
+                # --- BM25 Keyword Search ---
+                c_dept_id = None
+                if collection.name.startswith("dept_"):
+                    c_dept_id = int(collection.name.split("_")[1])
+                bm25, items = self._get_bm25_index(collection, c_dept_id)
+                if bm25:
+                    tokenized_query = query.lower().split(" ")
+                    bm25_scores = bm25.get_scores(tokenized_query)
+                    top_n = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:limit]
+                    for idx in top_n:
+                        if bm25_scores[idx] > 0:
+                            keyword_results.append(items[idx])
+            except Exception:
+                pass
+                
+        # Only take global top N for semantic results based on distance before fusion
+        formatted_results.sort(key=lambda x: x["distance"])
+        formatted_results = formatted_results[:limit]
+        
         # --- Reciprocal Rank Fusion ---
         if not formatted_results and not keyword_results:
             return []
