@@ -37,3 +37,5 @@ Thumbs.db
 .coverage
 chroma_db/
 
+
+coverage.xml

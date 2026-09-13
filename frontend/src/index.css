@@ -1,4 +1,4 @@
-/* ===== GLOBAL JAPANESE TEA HOUSE & BOTANICAL GARDEN DESIGN SYSTEM ===== */
+﻿/* ===== GLOBAL JAPANESE TEA HOUSE & BOTANICAL GARDEN DESIGN SYSTEM ===== */
 
 :root {
   --sidebar-width: 280px;
@@ -704,7 +704,7 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
   display: flex; align-items: center; gap: 14px;
   padding: 10px 14px; border-bottom: 1px solid var(--border-default); font-size: 12px;
 }
-.agent-step:last-child { border-bottom: none; }
+.step-arrow { text-align: center; color: var(--text-muted); padding: 2px 0; font-size: 14px; }
 .step-name { color: var(--color-blue); font-weight: 700; min-width: 120px; text-transform: uppercase; }
 .step-action { color: var(--text-primary); flex: 1; }
 .step-result { color: var(--color-green); font-weight: 700; }
@@ -1589,7 +1589,7 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
   margin-top: auto;
 }
 
-/* Mobile header bar — hidden on desktop */
+/* Mobile header bar â€” hidden on desktop */
 .mobile-header-bar {
   display: none;
 }
@@ -1704,5 +1704,6 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
     gap: 16px;
   }
 }
+
 
 
