@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unified LLM Client with retry logic and cost tracking.
 Replaces duplicated provider dispatch code across agents.py.
 Free-tier compatible â€” no external dependencies beyond existing API clients.
@@ -435,7 +435,7 @@ class LLMClient:
                 raise e
                 
         async for chunk in response:
-            if chunk.choices[0].delta.content:
+            if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
     
     def _simulate(self, user_message: str) -> str:
