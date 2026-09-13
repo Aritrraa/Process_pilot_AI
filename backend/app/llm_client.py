@@ -1,12 +1,13 @@
-"""
+﻿"""
 Unified LLM Client with retry logic and cost tracking.
 Replaces duplicated provider dispatch code across agents.py.
-Free-tier compatible — no external dependencies beyond existing API clients.
+Free-tier compatible â€” no external dependencies beyond existing API clients.
 """
-import time
 import logging
-from typing import Optional, Dict, Any, Generator
+from typing import Any
+
 from sqlalchemy.orm import Session
+
 from .models import LLMUsage
 
 logger = logging.getLogger("processpilot.llm")
@@ -42,8 +43,8 @@ class LLMClient:
         self._response_cache: dict = {}
 
     # ===== SEMANTIC ROUTER =====
-    # Simple queries (short length, greetings) → cheap fast model
-    # Complex queries (long, analytical) → powerful model
+    # Simple queries (short length, greetings) â†’ cheap fast model
+    # Complex queries (long, analytical) â†’ powerful model
     _CHEAP_MODEL = "llama-3.1-8b-instant"   # fast, free tier
     _POWER_MODEL = "llama-3.1-8b-instant"   # fallback to same model to guarantee it works (Groq decommissioned the other free ones)
     _SIMPLE_KEYWORDS = {"hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "bye", "good morning", "good evening"}
@@ -52,12 +53,12 @@ class LLMClient:
         """Semantic router: classify query complexity and return optimal model name."""
         msg = user_message.strip().lower()
         word_count = len(msg.split())
-        # Short greeting → cheap model
+        # Short greeting â†’ cheap model
         if word_count <= 5 or msg in self._SIMPLE_KEYWORDS:
-            logger.info(f"[SemanticRouter] Short/simple query → routing to {self._CHEAP_MODEL}")
+            logger.info(f"[SemanticRouter] Short/simple query â†’ routing to {self._CHEAP_MODEL}")
             return self._CHEAP_MODEL
-        # Long / complex query → powerful model
-        logger.info(f"[SemanticRouter] Complex query ({word_count} words) → routing to {self._POWER_MODEL}")
+        # Long / complex query â†’ powerful model
+        logger.info(f"[SemanticRouter] Complex query ({word_count} words) â†’ routing to {self._POWER_MODEL}")
         return self._POWER_MODEL
 
     def _cache_key(self, provider: str, system_prompt: str, user_message: str) -> str:
@@ -89,8 +90,8 @@ class LLMClient:
         system_prompt: str,
         user_message: str,
         max_retries: int = 3,
-        db: Optional[Session] = None,
-        user_id: Optional[int] = None,
+        db: Session | None = None,
+        user_id: int | None = None,
     ) -> str:
         """
         Make an LLM call with exponential backoff retry.
@@ -103,7 +104,7 @@ class LLMClient:
         # ===== EXACT-MATCH CACHE CHECK =====
         cache_key = self._cache_key(provider, system_prompt, user_message)
         if cache_key in self._response_cache:
-            logger.info("[Cache] HIT — returning cached LLM response")
+            logger.info("[Cache] HIT â€” returning cached LLM response")
             return self._response_cache[cache_key]
 
         # Circuit breaker check
@@ -156,10 +157,10 @@ class LLMClient:
                 last_error = e
                 err_str = str(e).lower()
 
-                # Don't retry on auth/model errors — they won't recover with retries
+                # Don't retry on auth/model errors â€” they won't recover with retries
                 if "401" in err_str or "404" in err_str or "authentication" in err_str or "api_key" in err_str or "does not exist" in err_str:
                     logger.error(f"LLM call permanent error ({provider}): {e}")
-                    return f"Error: {str(e)}"
+                    return f"Error: {e!s}"
 
                 self._consecutive_failures += 1
                 self.total_usage["failures"] += 1
@@ -180,7 +181,7 @@ class LLMClient:
             logger.warning("Circuit breaker ACTIVATED: falling back to simulation mode")
             return self._simulate(user_message)
         
-        return f"Error: LLM call failed after {max_retries} attempts. Last error: {str(last_error)}"
+        return f"Error: LLM call failed after {max_retries} attempts. Last error: {last_error!s}"
     
     async def stream(
         self,
@@ -189,8 +190,8 @@ class LLMClient:
         system_prompt: str,
         user_message: str,
         max_retries: int = 3,
-        db: Optional[Session] = None,
-        user_id: Optional[int] = None,
+        db: Session | None = None,
+        user_id: int | None = None,
     ):
         """
         Stream an LLM call with exponential backoff retry for the initial connection.
@@ -441,7 +442,7 @@ class LLMClient:
         """Offline simulation mode."""
         return (
             f"[Simulation Mode] Based on available documentation, here is a synthesized response "
-            f"to your query about: {user_message[:100]}...\n\n"
+            f"to your query about: {user_message[:2000]}...\n\n"
             f"This is a simulated response. Configure an API key in Settings to enable live AI responses."
         )
     
@@ -456,7 +457,7 @@ class LLMClient:
         costs = self.COST_PER_1K.get(provider, self.COST_PER_1K["simulation"])
         return (input_tokens / 1000 * costs["input"]) + (output_tokens / 1000 * costs["output"])
     
-    def get_usage_stats(self) -> Dict[str, Any]:
+    def get_usage_stats(self) -> dict[str, Any]:
         """Return current usage statistics."""
         return dict(self.total_usage)
     
@@ -470,3 +471,4 @@ class LLMClient:
 
 # Singleton
 llm_client = LLMClient()
+

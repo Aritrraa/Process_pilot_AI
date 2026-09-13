@@ -1,6 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
 from ..models import Memory
+
 
 class MemoryAgent:
     async def get_memories(self, user_id: int, query: str, db: AsyncSession) -> str:

@@ -1,11 +1,11 @@
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
 
-from ..database import get_db
-from ..models import User
 from ..auth import get_current_user
+from ..database import get_db
 from ..knowledge_graph import knowledge_graph
+from ..models import User
 
 router = APIRouter(prefix="/knowledge-graph", tags=["Knowledge Graph"])
 
@@ -21,8 +21,8 @@ async def get_full_graph(current_user: User = Depends(get_current_user), db: Asy
 
 @router.get("/search")
 async def search_graph(
-    entity_type: Optional[str] = Query(None, description="Filter by entity type: Document, User, Department, Technology"),
-    keyword: Optional[str] = Query(None, description="Search keyword"),
+    entity_type: str | None = Query(None, description="Filter by entity type: Document, User, Department, Technology"),
+    keyword: str | None = Query(None, description="Search keyword"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):

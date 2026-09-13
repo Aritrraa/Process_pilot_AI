@@ -2,10 +2,10 @@
 Document ingestion pipeline — text extraction and semantic-aware chunking.
 Supports PDF, DOCX, TXT, CSV, and Markdown files.
 """
+import logging
 import os
 import re
-import logging
-from typing import List, Dict, Any
+from typing import Any
 
 logger = logging.getLogger("processpilot.ingestion")
 
@@ -38,7 +38,7 @@ def extract_text_from_pdf(file_path: str) -> str:
                 text += page.get_text() + "\n"
         return text
     except Exception as e:
-        return f"[PDF parsing error]: {str(e)}"
+        return f"[PDF parsing error]: {e!s}"
 
 def extract_text_from_docx(file_path: str) -> str:
     if not HAS_PYTHON_DOCX:
@@ -47,7 +47,7 @@ def extract_text_from_docx(file_path: str) -> str:
         doc = docx.Document(file_path)
         return "\n".join([p.text for p in doc.paragraphs])
     except Exception as e:
-        return f"[Word parsing error]: {str(e)}"
+        return f"[Word parsing error]: {e!s}"
 
 def extract_text_from_excel(file_path: str) -> str:
     if not HAS_PANDAS:
@@ -61,14 +61,14 @@ def extract_text_from_excel(file_path: str) -> str:
             text_parts.append("\n")
         return "\n".join(text_parts)
     except Exception as e:
-        return f"[Excel parsing error]: {str(e)}"
+        return f"[Excel parsing error]: {e!s}"
 
 def extract_text_from_txt(file_path: str) -> str:
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
     except Exception as e:
-        return f"[Text file reading error]: {str(e)}"
+        return f"[Text file reading error]: {e!s}"
 
 def extract_content(file_path: str, file_type: str) -> str:
     """Extract text from a document and automatically redact PII before returning."""
@@ -90,7 +90,7 @@ def extract_content(file_path: str, file_type: str) -> str:
     return redacted_text
 
 
-def chunk_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> list[str]:
     """
     Semantic-aware recursive text splitter.
     Splits by hierarchy: sections → paragraphs → sentences → words.
@@ -110,7 +110,7 @@ def chunk_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> Li
     # Separators in order of priority (most meaningful boundaries first)
     separators = ["\n## ", "\n### ", "\n\n", "\n", ". ", "; ", ", ", " "]
     
-    def _split_recursive(text: str, seps: List[str]) -> List[str]:
+    def _split_recursive(text: str, seps: list[str]) -> list[str]:
         if len(text) <= chunk_size:
             return [text.strip()] if text.strip() else []
         
@@ -164,7 +164,7 @@ def chunk_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> Li
     return _split_recursive(text, separators)
 
 
-def process_file_upload(file_path: str, file_type: str, document_id: int) -> List[Dict[str, Any]]:
+def process_file_upload(file_path: str, file_type: str, document_id: int) -> list[dict[str, Any]]:
     """
     Extracts text, chunks it, and returns the chunks ready for vector database insertion.
     Reads from a local file path — used in legacy / local-dev code paths.
@@ -192,8 +192,9 @@ def extract_content_from_bytes(file_bytes: bytes, file_type: str, filename: str 
     Used by background tasks that receive file content after the HTTP request
     has already returned (Supabase Storage path or in-memory bytes from upload).
     """
-    from .pii_redactor import redact_document
     import io
+
+    from .pii_redactor import redact_document
     ext = file_type.lower()
     raw_text = ""
 
@@ -205,7 +206,7 @@ def extract_content_from_bytes(file_bytes: bytes, file_type: str, filename: str 
                 for page in doc:
                     raw_text += page.get_text() + "\n"
         except Exception as e:
-            return f"[PDF bytes parsing error]: {str(e)}"
+            return f"[PDF bytes parsing error]: {e!s}"
 
     elif ext in ["docx", "doc"]:
         if not HAS_PYTHON_DOCX:
@@ -214,7 +215,7 @@ def extract_content_from_bytes(file_bytes: bytes, file_type: str, filename: str 
             doc = docx.Document(io.BytesIO(file_bytes))
             raw_text = "\n".join([p.text for p in doc.paragraphs])
         except Exception as e:
-            return f"[DOCX bytes parsing error]: {str(e)}"
+            return f"[DOCX bytes parsing error]: {e!s}"
 
     elif ext in ["xlsx", "xls"]:
         if not HAS_PANDAS:
@@ -229,14 +230,14 @@ def extract_content_from_bytes(file_bytes: bytes, file_type: str, filename: str 
                 text_parts.append("")
             raw_text = "\n".join(text_parts)
         except Exception as e:
-            return f"[Excel bytes parsing error]: {str(e)}"
+            return f"[Excel bytes parsing error]: {e!s}"
 
     else:
         # TXT, CSV, MD — decode as UTF-8
         try:
             raw_text = file_bytes.decode("utf-8", errors="ignore")
         except Exception as e:
-            return f"[Text decode error]: {str(e)}"
+            return f"[Text decode error]: {e!s}"
 
     # PII Redaction Gate
     redacted_text, count = redact_document(raw_text)
@@ -250,7 +251,7 @@ def process_file_upload_from_bytes(
     file_type: str,
     document_id: int,
     filename: str = "document",
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Bytes-native ingestion pipeline — the canonical path used by BackgroundTasks.
     No disk I/O required: operates entirely on the in-memory bytes passed from

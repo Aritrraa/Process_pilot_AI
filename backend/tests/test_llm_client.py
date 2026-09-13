@@ -1,9 +1,10 @@
+﻿import asyncio
+
 """
-LLM Client tests — retry logic, circuit breaker, cost tracking, simulation fallback.
+LLM Client tests â€” retry logic, circuit breaker, cost tracking, simulation fallback.
 """
-import pytest
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -13,17 +14,17 @@ from app.llm_client import LLMClient
 class TestLLMClientSimulation:
     def test_simulation_mode_no_key(self):
         client = LLMClient()
-        result = client.call("gemini", "", "system prompt", "user query")
+        result = asyncio.run(client.call("gemini", "", "system prompt", "user query"))
         assert "Simulation Mode" in result
 
     def test_simulation_mode_explicit(self):
         client = LLMClient()
-        result = client.call("simulation", "any_key", "system prompt", "test query")
+        result = asyncio.run(client.call("simulation", "any_key", "system prompt", "test query"))
         assert "Simulation Mode" in result
 
     def test_simulation_contains_query(self):
         client = LLMClient()
-        result = client.call("simulation", "", "sys", "What is Python?")
+        result = asyncio.run(client.call("simulation", "", "sys", "What is Python?"))
         assert "Python" in result or "Simulation" in result
 
 
@@ -59,7 +60,7 @@ class TestContextLimits:
 
     def test_context_safe_long_text(self):
         client = LLMClient()
-        huge = "word " * 200000  # ~200K words ≈ 260K tokens
+        huge = "word " * 200000  # ~200K words â‰ˆ 260K tokens
         assert client.is_context_safe("groq", huge, "query") is False
 
 
@@ -72,7 +73,7 @@ class TestUsageTracking:
 
     def test_simulation_tracks_calls(self):
         client = LLMClient()
-        client.call("simulation", "", "sys", "query")
+        asyncio.run(client.call("simulation", "", "sys", "query"))
         stats = client.get_usage_stats()
         # Simulation doesn't go through retry path, so may not track
         # Just verify it doesn't crash
@@ -95,3 +96,6 @@ class TestCostCalculation:
         client = LLMClient()
         cost = client._calculate_cost("simulation", 1000, 500)
         assert cost == 0.0
+
+
+

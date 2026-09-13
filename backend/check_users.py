@@ -1,7 +1,9 @@
 import asyncio
-from sqlalchemy.future import select
+
 from app.database import SessionLocal
-from app.models import User, Department
+from app.models import Department, User
+from sqlalchemy.future import select
+
 
 async def check():
     async with SessionLocal() as db:

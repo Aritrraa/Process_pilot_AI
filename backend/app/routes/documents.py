@@ -11,31 +11,36 @@ Key design decisions:
   - _ingest_document_background intentionally uses a SYNCHRONOUS SQLAlchemy session
     because it runs inside asyncio.to_thread() (a thread pool), not the async event loop.
 """
+import asyncio
+import datetime
 import logging
 import os
 import uuid
-import aiofiles
-import asyncio
-import datetime
-from typing import Optional
 
+import aiofiles
 from fastapi import (
-    APIRouter, BackgroundTasks, Depends,
-    HTTPException, UploadFile, File, Form, status
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
 )
+from sqlalchemy import delete as sql_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import delete as sql_delete
 
-from ..database import get_db
-from ..models import User, Document, DocumentChunk, UserSetting
-from ..schemas import DocumentResponse
-from ..auth import get_current_user
-from ..ingestion import process_file_upload
-from ..vectorstore import vector_store_manager
-from ..storage import storage_client
-from ..config import settings
 from ..abac import verify_document_access
+from ..auth import get_current_user
+from ..config import settings
+from ..database import get_db
+from ..ingestion import process_file_upload
+from ..models import Document, DocumentChunk, User
+from ..schemas import DocumentResponse
+from ..storage import storage_client
+from ..vectorstore import vector_store_manager
 
 logger = logging.getLogger("processpilot.documents")
 
@@ -59,9 +64,9 @@ def _ingest_document_background(
     document_id: int,
     file_path: str,
     file_ext: str,
-    api_key: Optional[str],
+    api_key: str | None,
     llm_provider: str,
-    department_id: Optional[int],
+    department_id: int | None,
 ):
     """
     Heavy processing moved off the async event loop via asyncio.to_thread:
@@ -147,7 +152,7 @@ def _ingest_document_background(
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    department_id: Optional[int] = Form(None),
+    department_id: int | None = Form(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -164,18 +169,19 @@ async def upload_document(
             detail="You can only upload documents to your own department.",
         )
 
-    # Fetch user settings async
+    # Fetch session scoped API key
     from ..crypto import decrypt_key
-    result = await db.execute(select(UserSetting).filter(UserSetting.user_id == current_user.id))
-    settings_record = result.scalars().first()
-    llm_provider = settings_record.llm_provider if settings_record else "simulation"
-    api_key: Optional[str] = None
-    if llm_provider == "gemini" and settings_record:
-        api_key = decrypt_key(settings_record.gemini_api_key) or os.getenv("GEMINI_API_KEY")
-    elif llm_provider == "groq" and settings_record:
-        api_key = decrypt_key(settings_record.groq_api_key) or os.getenv("GROQ_API_KEY")
-    elif llm_provider == "openai" and settings_record:
-        api_key = decrypt_key(settings_record.openai_api_key) or os.getenv("OPENAI_API_KEY")
+    session = getattr(current_user, "current_session", None)
+    llm_provider = session.llm_provider if session else "simulation"
+    api_key: str | None = None
+    if session:
+        if llm_provider == "gemini":
+            api_key = decrypt_key(session.gemini_api_key) or os.getenv("GEMINI_API_KEY")
+        elif llm_provider == "groq":
+            api_key = decrypt_key(session.groq_api_key) or os.getenv("GROQ_API_KEY")
+        elif llm_provider == "openai":
+            api_key = decrypt_key(session.openai_api_key) or os.getenv("OPENAI_API_KEY")
+            
     if not api_key:
         llm_provider = "simulation"
 
@@ -222,7 +228,7 @@ async def upload_document(
             os.remove(temp_file_path)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to store file: {str(e)}",
+            detail=f"Failed to store file: {e!s}",
         )
 
     # ── Create Document record (status=pending) ───────────────────────────
@@ -363,5 +369,5 @@ async def delete_document(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete document records: {str(e)}",
+            detail=f"Failed to delete document records: {e!s}",
         )

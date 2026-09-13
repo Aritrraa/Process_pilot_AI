@@ -1,8 +1,10 @@
 import base64
 import hashlib
-from cryptography.fernet import Fernet
-from app.config import settings
 import logging
+
+from cryptography.fernet import Fernet
+
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 

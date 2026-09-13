@@ -2,8 +2,9 @@
 ProcessPilot AI — Enterprise Knowledge & Operations Copilot
 Run with: python run.py
 """
-import uvicorn
 import os
+
+import uvicorn
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))

@@ -1,9 +1,10 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import or_
-from .models import KGNode, KGEdge
+
+from .models import KGEdge, KGNode
 
 logger = logging.getLogger("processpilot.knowledge_graph")
 
@@ -13,7 +14,7 @@ class KnowledgeGraph:
     Replaces the legacy JSON+NetworkX implementation for stateless horizontally scaled deployments.
     """
 
-    async def add_entity(self, db: AsyncSession, entity_id: str, entity_type: str, properties: Dict[str, Any] = None):
+    async def add_entity(self, db: AsyncSession, entity_id: str, entity_type: str, properties: dict[str, Any] = None):
         """Add or update a node in the knowledge graph."""
         props = properties or {}
         result = await db.execute(select(KGNode).filter(KGNode.id == entity_id))
@@ -33,7 +34,7 @@ class KnowledgeGraph:
             await db.rollback()
             logger.error(f"[KnowledgeGraph] Failed to add entity {entity_id}: {e}")
 
-    async def add_relationship(self, db: AsyncSession, source_id: str, target_id: str, relationship: str, properties: Dict[str, Any] = None):
+    async def add_relationship(self, db: AsyncSession, source_id: str, target_id: str, relationship: str, properties: dict[str, Any] = None):
         """Add a directed edge (relationship) between two entities."""
         r_src = await db.execute(select(KGNode).filter(KGNode.id == source_id))
         source_node = r_src.scalars().first()
@@ -74,14 +75,14 @@ class KnowledgeGraph:
             existing_edge.properties = merged_props
             await db.commit()
 
-    async def get_entity(self, db: AsyncSession, entity_id: str) -> Optional[Dict[str, Any]]:
+    async def get_entity(self, db: AsyncSession, entity_id: str) -> dict[str, Any] | None:
         result = await db.execute(select(KGNode).filter(KGNode.id == entity_id))
         node = result.scalars().first()
         if not node:
             return None
         return {"id": node.id, "type": node.entity_type, **(node.properties or {})}
 
-    async def get_neighbors(self, db: AsyncSession, entity_id: str) -> List[Dict[str, Any]]:
+    async def get_neighbors(self, db: AsyncSession, entity_id: str) -> list[dict[str, Any]]:
         """Get all entities connected to a given entity."""
         neighbors = []
 
@@ -113,7 +114,7 @@ class KnowledgeGraph:
 
         return neighbors
 
-    async def search_entities(self, db: AsyncSession, entity_type: Optional[str] = None, keyword: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def search_entities(self, db: AsyncSession, entity_type: str | None = None, keyword: str | None = None) -> list[dict[str, Any]]:
         """Search entities by type and/or keyword in their ID."""
         query = select(KGNode)
         if entity_type:
@@ -126,7 +127,7 @@ class KnowledgeGraph:
         nodes = result.scalars().all()
         return [{"id": n.id, "type": n.entity_type, **(n.properties or {})} for n in nodes]
 
-    async def get_graph_stats(self, db: AsyncSession) -> Dict[str, Any]:
+    async def get_graph_stats(self, db: AsyncSession) -> dict[str, Any]:
         """Return basic statistics about the knowledge graph."""
         from sqlalchemy import func
         r_n = await db.execute(select(func.count(KGNode.id)))
@@ -146,7 +147,7 @@ class KnowledgeGraph:
             "entity_types": type_counts
         }
 
-    async def get_full_graph(self, db: AsyncSession) -> Dict[str, Any]:
+    async def get_full_graph(self, db: AsyncSession) -> dict[str, Any]:
         """
         Build the full graph for visualization directly from the live database.
         This approach always shows up-to-date connections even if KG seeding is incomplete.
@@ -156,7 +157,7 @@ class KnowledgeGraph:
           - Documents (with uploaded_by user, belongs_to dept)
           - Tasks (with assigned_to user, linked to document/meeting)
         """
-        from .models import User, Department, Document, Task
+        from .models import Department, Document, Task, User
 
         node_list = []
         edge_list = []

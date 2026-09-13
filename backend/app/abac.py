@@ -1,9 +1,10 @@
 from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from .database import get_db
-from .models import User, Document, Task, Meeting
+
 from .auth import get_current_user
+from .database import get_db
+from .models import Document, Meeting, Task, User
 
 
 async def evaluate_policy(subject: User, resource_type: str, resource_obj: any, action: str, db: AsyncSession) -> bool:

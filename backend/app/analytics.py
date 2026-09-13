@@ -1,12 +1,14 @@
+import datetime
+from typing import Any
+
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, distinct
-from typing import Dict, Any, List
-import datetime
-from .models import User, Document, Task, AgentLog, Department, LLMUsage
+
+from .models import AgentLog, Department, Document, LLMUsage, Task, User
 
 
-async def get_system_analytics(db: AsyncSession, current_user: User = None) -> Dict[str, Any]:
+async def get_system_analytics(db: AsyncSession, current_user: User = None) -> dict[str, Any]:
     # 1. Resolve scoping based on role
     role = current_user.role if current_user else "Employee"
     scoped_usage = []

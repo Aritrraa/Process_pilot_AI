@@ -1,6 +1,7 @@
-import os
 import logging
-from typing import Optional, Any, List
+import os
+from typing import Any
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
@@ -52,24 +53,24 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = "./chroma_db"
     
     # Pinecone Managed Credentials
-    PINECONE_API_KEY: Optional[str] = None
-    PINECONE_ENV: Optional[str] = None
+    PINECONE_API_KEY: str | None = None
+    PINECONE_ENV: str | None = None
     PINECONE_INDEX: str = "processpilot"
     
     # Qdrant Managed Credentials
-    QDRANT_URL: Optional[str] = None
-    QDRANT_API_KEY: Optional[str] = None
+    QDRANT_URL: str | None = None
+    QDRANT_API_KEY: str | None = None
     
     # Upload Settings
     UPLOAD_DIR: str = "./uploads"
     MAX_UPLOAD_SIZE_MB: int = 10
-    ALLOWED_FILE_TYPES: List[str] = ["pdf", "docx", "doc", "txt", "csv", "md", "xlsx", "xls"]
+    ALLOWED_FILE_TYPES: list[str] = ["pdf", "docx", "doc", "txt", "csv", "md", "xlsx", "xls"]
 
     # Supabase Storage — for persistent file storage on Render
     # Set these env vars to enable Supabase Storage bucket uploads.
     # Without them, files fall back to local disk (ephemeral on Render).
-    SUPABASE_URL: Optional[str] = None
-    SUPABASE_KEY: Optional[str] = None
+    SUPABASE_URL: str | None = None
+    SUPABASE_KEY: str | None = None
     SUPABASE_STORAGE_BUCKET: str = "documents"
 
     class Config:

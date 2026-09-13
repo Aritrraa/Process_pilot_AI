@@ -1,10 +1,13 @@
-from typing import List, Dict, Any
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
 from ..models import Task
 
+
 class IncidentAgent:
-    async def execute(self, query: str, db: AsyncSession) -> List[Dict[str, Any]]:
+    async def execute(self, query: str, db: AsyncSession) -> list[dict[str, Any]]:
         # Retrieve tasks/tickets related to logs/incidents
         # Query task titles or descriptions containing parts of the query
         import re

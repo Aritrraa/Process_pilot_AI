@@ -1,13 +1,15 @@
-from typing import List, Dict, Any
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 class GraphAgent:
-    async def execute(self, query: str, db: AsyncSession) -> List[Dict[str, Any]]:
+    async def execute(self, query: str, db: AsyncSession) -> list[dict[str, Any]]:
         # Query PostgreSQL knowledge graph for entities and neighbors
-        from ..knowledge_graph import knowledge_graph
-        
         # Simple extraction of keywords (cleaning punctuation)
         import re
+
+        from ..knowledge_graph import knowledge_graph
         cleaned_query = re.sub(r'[^\w\s]', ' ', query)
         keywords = [word.lower() for word in cleaned_query.split() if len(word) > 3]
         if not keywords:

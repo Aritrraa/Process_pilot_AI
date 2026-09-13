@@ -1,7 +1,7 @@
 import json
-from typing import Dict, List
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import logging
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger("processpilot.ws")
 router = APIRouter(prefix="/ws", tags=["websockets"])
@@ -13,7 +13,7 @@ class ConnectionManager:
     """
     def __init__(self):
         # Maps user_id to a list of active WebSocket connections
-        self.active_connections: Dict[int, List[WebSocket]] = {}
+        self.active_connections: dict[int, list[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, user_id: int):
         await websocket.accept()

@@ -1,15 +1,17 @@
-"""
-ABAC Policy tests — rewritten with proper pytest fixtures.
+﻿"""
+ABAC Policy tests â€” rewritten with proper pytest fixtures.
 Tests all access control boundaries for documents, tasks, and meetings.
 """
-import pytest
-import sys
+import asyncio
 import os
+import sys
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models import User, Document, Task, Meeting
 from app.abac import evaluate_policy
+from app.models import Document, Task, User
 
 
 @pytest.fixture
@@ -44,70 +46,71 @@ def tasks():
 # ============ Document Read Policies ============
 class TestDocumentReadPolicy:
     def test_admin_reads_any_document(self, users, documents):
-        assert evaluate_policy(users["admin"], "document", documents["other_doc"], "read", None) is True
+        assert asyncio.run(evaluate_policy(users["admin"], "document", documents["other_doc"], "read", None)) is True
 
     def test_employee_reads_same_dept_document(self, users, documents):
-        assert evaluate_policy(users["employee"], "document", documents["mgr_doc"], "read", None) is True
+        assert asyncio.run(evaluate_policy(users["employee"], "document", documents["mgr_doc"], "read", None)) is True
 
     def test_employee_blocked_from_other_dept_document(self, users, documents):
-        assert evaluate_policy(users["employee"], "document", documents["other_doc"], "read", None) is False
+        assert asyncio.run(evaluate_policy(users["employee"], "document", documents["other_doc"], "read", None)) is False
 
     def test_manager_reads_own_dept_document(self, users, documents):
-        assert evaluate_policy(users["manager"], "document", documents["emp_doc"], "read", None) is True
+        assert asyncio.run(evaluate_policy(users["manager"], "document", documents["emp_doc"], "read", None)) is True
 
     def test_other_dept_manager_blocked(self, users, documents):
-        assert evaluate_policy(users["other_mgr"], "document", documents["mgr_doc"], "read", None) is False
+        assert asyncio.run(evaluate_policy(users["other_mgr"], "document", documents["mgr_doc"], "read", None)) is False
 
 
 # ============ Document Delete Policies ============
 class TestDocumentDeletePolicy:
     def test_admin_deletes_any_document(self, users, documents):
-        assert evaluate_policy(users["admin"], "document", documents["other_doc"], "delete", None) is True
+        assert asyncio.run(evaluate_policy(users["admin"], "document", documents["other_doc"], "delete", None)) is True
 
     def test_employee_deletes_own_document(self, users, documents):
-        assert evaluate_policy(users["employee"], "document", documents["emp_doc"], "delete", None) is True
+        assert asyncio.run(evaluate_policy(users["employee"], "document", documents["emp_doc"], "delete", None)) is True
 
     def test_employee_cannot_delete_manager_document(self, users, documents):
-        assert evaluate_policy(users["employee"], "document", documents["mgr_doc"], "delete", None) is False
+        assert asyncio.run(evaluate_policy(users["employee"], "document", documents["mgr_doc"], "delete", None)) is False
 
     def test_other_dept_employee_cannot_delete(self, users, documents):
-        assert evaluate_policy(users["other_dept_emp"], "document", documents["mgr_doc"], "delete", None) is False
+        assert asyncio.run(evaluate_policy(users["other_dept_emp"], "document", documents["mgr_doc"], "delete", None)) is False
 
 
 # ============ Task Update Policies ============
 class TestTaskUpdatePolicy:
     def test_employee_updates_own_task(self, users, tasks):
-        assert evaluate_policy(users["employee"], "task", tasks["emp_task"], "update", None) is True
+        assert asyncio.run(evaluate_policy(users["employee"], "task", tasks["emp_task"], "update", None)) is True
 
     def test_employee_cannot_update_other_task(self, users, tasks):
-        assert evaluate_policy(users["other_dept_emp"], "task", tasks["emp_task"], "update", None) is False
+        assert asyncio.run(evaluate_policy(users["other_dept_emp"], "task", tasks["emp_task"], "update", None)) is False
 
     def test_admin_updates_any_task(self, users, tasks):
-        assert evaluate_policy(users["admin"], "task", tasks["emp_task"], "update", None) is True
+        assert asyncio.run(evaluate_policy(users["admin"], "task", tasks["emp_task"], "update", None)) is True
 
     def test_manager_updates_own_task(self, users, tasks):
-        assert evaluate_policy(users["manager"], "task", tasks["mgr_task"], "update", None) is True
+        assert asyncio.run(evaluate_policy(users["manager"], "task", tasks["mgr_task"], "update", None)) is True
 
     def test_employee_status_change_allowed(self, users, tasks):
-        assert evaluate_policy(users["employee"], "task", tasks["emp_task"], "change_status", None) is True
+        assert asyncio.run(evaluate_policy(users["employee"], "task", tasks["emp_task"], "change_status", None)) is True
 
 
 # ============ Task Delete Policies ============
 class TestTaskDeletePolicy:
     def test_employee_cannot_delete_task(self, users, tasks):
-        assert evaluate_policy(users["employee"], "task", tasks["emp_task"], "delete", None) is False
+        assert asyncio.run(evaluate_policy(users["employee"], "task", tasks["emp_task"], "delete", None)) is False
 
     def test_admin_deletes_any_task(self, users, tasks):
-        assert evaluate_policy(users["admin"], "task", tasks["emp_task"], "delete", None) is True
+        assert asyncio.run(evaluate_policy(users["admin"], "task", tasks["emp_task"], "delete", None)) is True
 
     def test_other_employee_cannot_delete(self, users, tasks):
-        assert evaluate_policy(users["other_dept_emp"], "task", tasks["emp_task"], "delete", None) is False
+        assert asyncio.run(evaluate_policy(users["other_dept_emp"], "task", tasks["emp_task"], "delete", None)) is False
 
 
 # ============ Default Deny ============
 class TestDefaultDeny:
     def test_unknown_resource_type_denied(self, users):
-        assert evaluate_policy(users["employee"], "unknown", None, "read", None) is False
+        assert asyncio.run(evaluate_policy(users["employee"], "unknown", None, "read", None)) is False
 
     def test_unknown_action_denied(self, users, documents):
-        assert evaluate_policy(users["employee"], "document", documents["mgr_doc"], "unknown_action", None) is False
+        assert asyncio.run(evaluate_policy(users["employee"], "document", documents["mgr_doc"], "unknown_action", None)) is False
+

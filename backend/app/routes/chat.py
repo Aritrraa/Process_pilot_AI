@@ -1,14 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
-from typing import Optional
 
-from ..database import get_db
-from ..models import User, AIFailure
-from ..schemas import ChatQuery
-from ..auth import get_current_user
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..agents import process_query, process_query_stream
+from ..auth import get_current_user
+from ..database import get_db
+from ..models import AIFailure, User
+from ..schemas import ChatQuery
 
 router = APIRouter(prefix="/chat", tags=["AI Chat"])
 
@@ -17,7 +17,7 @@ class FeedbackPayload(BaseModel):
     query: str
     response: str
     feedback_type: str  # 'thumbs_up' or 'thumbs_down'
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 @router.post("/")

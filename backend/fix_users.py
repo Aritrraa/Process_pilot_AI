@@ -3,12 +3,12 @@ Fix missing users: create Mark (manager) and John, Emma, assign all employees pr
 Run: python fix_users.py
 """
 import asyncio
-from sqlalchemy.future import select
-from sqlalchemy import text
-from app.database import SessionLocal
-from app.models import User, Department
-from passlib.context import CryptContext
 import sys
+
+from app.database import SessionLocal
+from app.models import Department, User
+from passlib.context import CryptContext
+from sqlalchemy.future import select
 
 # Ensure UTF-8 output
 if hasattr(sys.stdout, 'reconfigure'):

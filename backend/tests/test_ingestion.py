@@ -1,7 +1,6 @@
 """
 Ingestion pipeline tests — text chunking and file extraction.
 """
-import pytest
 import os
 import sys
 import tempfile

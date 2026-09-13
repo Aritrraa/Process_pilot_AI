@@ -1,24 +1,33 @@
-import os
 import asyncio
 import datetime
 import json
 import logging
-from typing import List, Dict, Any, Optional
-from sqlalchemy.orm import Session
+import os
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 logger = logging.getLogger(__name__)
 
-from ..models import User, Document, DocumentChunk, Meeting, Task, Memory, AgentLog, UserSetting, PromptVersion
-
-from .search_agent import SearchAgent
-from .incident_agent import IncidentAgent
-from .sop_agent import SOPAgent
-from .memory_agent import MemoryAgent
-from .graph_agent import GraphAgent
-from .comparison_agent import ComparisonAgent
 from ..llm_client import LLMClient
+from ..models import (
+    AgentLog,
+    Document,
+    DocumentChunk,
+    Meeting,
+    Memory,
+    PromptVersion,
+    Task,
+    User,
+    UserSetting,
+)
+from .comparison_agent import ComparisonAgent
+from .graph_agent import GraphAgent
+from .incident_agent import IncidentAgent
+from .memory_agent import MemoryAgent
+from .search_agent import SearchAgent
+from .sop_agent import SOPAgent
 
 llm_client = LLMClient()
 
@@ -91,7 +100,7 @@ class CEOAgent:
             )
         return "\n".join(lines)
 
-    async def _handle_org_directory_query(self, query: str, user: User, db: AsyncSession) -> Optional[str]:
+    async def _handle_org_directory_query(self, query: str, user: User, db: AsyncSession) -> str | None:
         q = query.lower()
         is_directory_query = any(x in q for x in ["manager", "report", "who is", "email", "contact", "phone", "details", "team", "reports to", "work under", "id details"])
         if not is_directory_query:
@@ -213,20 +222,20 @@ class CEOAgent:
         history_chunks.reverse()
         return "\n".join(history_chunks)
 
-    async def process_query(self, user: User, query: str, db: AsyncSession, scope: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def process_query(self, user: User, query: str, db: AsyncSession, scope: list[str] | None = None) -> dict[str, Any]:
         try:
             return await self._process_query_internal(user, query, db, scope)
         except Exception as e:
             import traceback
             tb = traceback.format_exc()
             return {
-                "answer": f"System Error: {str(e)}\n\nTraceback:\n{tb}",
+                "answer": f"System Error: {e!s}\n\nTraceback:\n{tb}",
                 "sources": [],
                 "incidents": [],
                 "steps": []
             }
 
-    async def _process_query_internal(self, user: User, query: str, db: AsyncSession, scope: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def _process_query_internal(self, user: User, query: str, db: AsyncSession, scope: list[str] | None = None) -> dict[str, Any]:
         # Initialize or retrieve user session for agent loop tracking
         if user.id not in ACTIVE_AGENT_SESSIONS:
             ACTIVE_AGENT_SESSIONS[user.id] = {
@@ -375,13 +384,15 @@ class CEOAgent:
         system_prompt = settings_record.system_prompt if settings_record else None
         
         from app.crypto import decrypt_key
-        llm_provider = settings_record.llm_provider if settings_record else "simulation"
+        session = getattr(user, "current_session", None)
+        llm_provider = session.llm_provider if session else "simulation"
+        
         if llm_provider == "gemini":
-            api_key = decrypt_key(settings_record.gemini_api_key) if settings_record else os.getenv("GEMINI_API_KEY")
+            api_key = decrypt_key(session.gemini_api_key) if session and session.gemini_api_key else os.getenv("GEMINI_API_KEY")
         elif llm_provider == "groq":
-            api_key = decrypt_key(settings_record.groq_api_key) if settings_record else os.getenv("GROQ_API_KEY")
+            api_key = decrypt_key(session.groq_api_key) if session and session.groq_api_key else os.getenv("GROQ_API_KEY")
         elif llm_provider == "openai":
-            api_key = decrypt_key(settings_record.openai_api_key) if settings_record else os.getenv("OPENAI_API_KEY")
+            api_key = decrypt_key(session.openai_api_key) if session and session.openai_api_key else os.getenv("OPENAI_API_KEY")
         else:
             api_key = None
             
@@ -613,7 +624,7 @@ class CEOAgent:
                 f"Recent Conversation History:\n{conversation_history}\n\n"
                 f"User Memories:\n{user_memories}\n\n"
                 f"Retrieved Document Context:\n" + "\n---\n".join(context_chunks) + "\n\n"
-                f"Related Tickets/Incidents:\n" + str(incident_results) + "\n\n"
+                "Related Tickets/Incidents:\n" + str(incident_results) + "\n\n"
                 "Answer the user clearly. Highlight steps, source citations, and any related incidents/tickets if applicable."
             )
             
@@ -707,13 +718,13 @@ class CEOAgent:
             "steps": steps
         }
 
-    async def process_query_stream(self, user: User, query: str, db: AsyncSession, scope: Optional[List[str]] = None):
+    async def process_query_stream(self, user: User, query: str, db: AsyncSession, scope: list[str] | None = None):
         """
         Stream the LLM response as Server-Sent Events (SSE).
         Re-uses the context gathering from the normal pipeline, but streams the LLM completion.
         """
-        import json
         import asyncio
+
         from ..llm_client import llm_client
 
         try:
@@ -722,14 +733,21 @@ class CEOAgent:
             user_settings = r_us.scalars().first()
             api_key = None
             llm_provider = "simulation"
-            system_prompt = None
-            if user_settings:
+            system_prompt = user_settings.system_prompt if user_settings else None
+            
+            session = getattr(user, "current_session", None)
+            if session:
                 from app.crypto import decrypt_key
-                llm_provider = user_settings.llm_provider or "simulation"
-                system_prompt = user_settings.system_prompt
-                if llm_provider == "gemini": api_key = decrypt_key(user_settings.gemini_api_key)
-                elif llm_provider == "openai": api_key = decrypt_key(user_settings.openai_api_key)
-                elif llm_provider == "groq": api_key = decrypt_key(user_settings.groq_api_key)
+                llm_provider = session.llm_provider or "simulation"
+                if llm_provider == "gemini" and session.gemini_api_key: api_key = decrypt_key(session.gemini_api_key)
+                elif llm_provider == "openai" and session.openai_api_key: api_key = decrypt_key(session.openai_api_key)
+                elif llm_provider == "groq" and session.groq_api_key: api_key = decrypt_key(session.groq_api_key)
+                
+                # fallback to env
+                if not api_key:
+                    if llm_provider == "gemini": api_key = os.getenv("GEMINI_API_KEY")
+                    elif llm_provider == "openai": api_key = os.getenv("OPENAI_API_KEY")
+                    elif llm_provider == "groq": api_key = os.getenv("GROQ_API_KEY")
 
             # Memory
             r_mem = await db.execute(select(Memory).filter(Memory.user_id == user.id))
@@ -874,7 +892,7 @@ class CEOAgent:
 
         except Exception as e:
             logger.error(f"[CEOAgent] process_query_stream crashed: {e}", exc_info=True)
-            err_msg = json.dumps({"type": "chunk", "content": f"[AI Copilot Error] {str(e)}. Please try again."})
+            err_msg = json.dumps({"type": "chunk", "content": f"[AI Copilot Error] {e!s}. Please try again."})
             yield f"data: {err_msg}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

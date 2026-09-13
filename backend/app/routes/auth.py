@@ -1,15 +1,30 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy import update, delete as sql_delete
+﻿import datetime
 from datetime import timedelta
 
-from ..database import get_db
-from ..models import User, Department, UserSetting, Task, Document
-from ..schemas import UserCreate, UserLogin, Token, UserResponse, DepartmentResponse, DepartmentCreate
-from ..auth import get_password_hash, verify_password, create_access_token, get_current_user
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import delete as sql_delete
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+
+from ..auth import (
+    create_access_token,
+    get_current_user,
+    get_password_hash,
+    verify_password,
+)
 from ..config import settings
+from ..database import get_db
+from ..models import Department, Document, Task, User, UserSetting
 from ..rate_limiter import rate_limit
+from ..schemas import (
+    DepartmentCreate,
+    DepartmentResponse,
+    Token,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -63,6 +78,11 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     
     return user
 
+import uuid
+
+from ..models import Session
+
+
 @router.post("/login", response_model=Token,
              dependencies=[Depends(rate_limit(limit=200, window=3600))])
 async def login(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
@@ -74,9 +94,20 @@ async def login(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
             detail="Incorrect email or password"
         )
         
+    session_id = str(uuid.uuid4())
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    expires_at = datetime.datetime.utcnow() + access_token_expires
+    
+    new_session = Session(
+        id=session_id,
+        user_id=user.id,
+        expires_at=expires_at
+    )
+    db.add(new_session)
+    await db.commit()
+    
     access_token = create_access_token(
-        data={"sub": user.id}, expires_delta=access_token_expires
+        data={"sub": user.id, "sid": session_id}, expires_delta=access_token_expires
     )
     
     return {
@@ -159,18 +190,19 @@ async def list_team(
         return result.scalars().all()
     return [current_user]
 
+
 from pydantic import BaseModel
-from typing import Optional
+
 
 class EmployeeTransferRequest(BaseModel):
-    manager_id: Optional[int] = None
+    manager_id: int | None = None
 
 class SelectManagerRequest(BaseModel):
     manager_id: int
 
 class RoleChangeRequest(BaseModel):
     new_role: str
-    new_manager_id: Optional[int] = None
+    new_manager_id: int | None = None
 
 @router.patch("/employees/{employee_id}/transfer", response_model=UserResponse)
 async def transfer_employee(
@@ -251,7 +283,7 @@ async def select_manager(
 
 
 class UserDeleteRequest(BaseModel):
-    successor_id: Optional[int] = None
+    successor_id: int | None = None
 
 @router.patch("/users/{user_id}/role", response_model=UserResponse)
 async def change_user_role(
@@ -338,7 +370,7 @@ async def delete_user(
             detail="You cannot delete your own admin account"
         )
 
-    # Shared helper: reassign all documents owned by user_to_delete → Admin
+    # Shared helper: reassign all documents owned by user_to_delete â†’ Admin
     # Append original owner name in parentheses so history is preserved.
     async def _reassign_documents_to_admin(user: User):
         # Find the first Admin user (excluding the one being deleted)
@@ -366,7 +398,7 @@ async def delete_user(
     # 4. Handle Employee / Contractor Deletion
     if user_to_delete.role in ("Employee", "Contractor"):
         manager_id = user_to_delete.manager_id
-        # Reassign documents → Admin with ownership breadcrumb in title
+        # Reassign documents â†’ Admin with ownership breadcrumb in title
         await _reassign_documents_to_admin(user_to_delete)
         if manager_id:
             # Reassign ALL their tasks to their team manager
@@ -376,7 +408,7 @@ async def delete_user(
                 )
             )
         else:
-            # No manager – NULL out (DB-level SET NULL handles this safely)
+            # No manager â€“ NULL out (DB-level SET NULL handles this safely)
             await db.execute(
                 update(Task).where(Task.assigned_to == user_to_delete.id).values(assigned_to=None)
             )
@@ -393,7 +425,7 @@ async def delete_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Successor manager/employee ID is required to delete a manager"
             )
-        # Reassign documents → Admin with ownership breadcrumb in title
+        # Reassign documents â†’ Admin with ownership breadcrumb in title
         await _reassign_documents_to_admin(user_to_delete)
 
         succ_result = await db.execute(select(User).filter(User.id == payload.successor_id))
@@ -464,7 +496,7 @@ async def delete_user(
 
     # 6. Handle Admin Deletion (non-self)
     else:
-        # Reassign documents → another Admin with ownership breadcrumb
+        # Reassign documents â†’ another Admin with ownership breadcrumb
         await _reassign_documents_to_admin(user_to_delete)
         # Reassign tasks to current_user (the admin performing the deletion)
         await db.execute(
@@ -478,7 +510,7 @@ async def delete_user(
         return {"detail": "Admin account deleted. Documents and tasks reassigned."}
 
 
-# ── Circular Reporting Detection ───────────────────────────────────────────────
+# â”€â”€ Circular Reporting Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async def _is_subordinate(db: AsyncSession, user_id: int, potential_ancestor_id: int) -> bool:
     """
     Returns True if user_id is already in the downstream reporting tree of
@@ -513,8 +545,8 @@ async def swap_positions(
 ):
     """
     Atomically swap a Manager and an Employee's positions:
-    - Manager → Employee (inherits the employee's IC tasks)
-    - Employee → Manager (inherits the manager's team, oversight tasks, department)
+    - Manager â†’ Employee (inherits the employee's IC tasks)
+    - Employee â†’ Manager (inherits the manager's team, oversight tasks, department)
     All operations occur in a single SQL transaction.
     """
     if current_user.role != "Admin":
@@ -550,12 +582,12 @@ async def swap_positions(
     old_emp_dept = employee.department_id
     old_emp_manager_id = employee.manager_id
 
-    # 4. Promote employee → Manager
+    # 4. Promote employee â†’ Manager
     employee.role = manager.role           # Inherits Director or Manager title
     employee.department_id = old_mgr_dept  # Inherits the manager's department
     employee.manager_id = None             # Top-level in their new department
 
-    # 5. Demote manager → Employee
+    # 5. Demote manager â†’ Employee
     manager.role = "Employee"
     manager.department_id = old_emp_dept   # Inherits the employee's old department
     manager.manager_id = employee.id       # Now reports to the newly promoted manager
@@ -563,20 +595,20 @@ async def swap_positions(
     # 6. Flush to DB so IDs are stable for subsequent UPDATE statements
     await db.flush()
 
-    # 7. Transfer direct reports from old manager → new manager (employee)
+    # 7. Transfer direct reports from old manager â†’ new manager (employee)
     await db.execute(
         update(User)
         .where(User.manager_id == manager.id, User.id != employee.id)
         .values(manager_id=employee.id, department_id=old_mgr_dept)
     )
 
-    # 8. Transfer task OVERSIGHT: tasks managed by old manager → new manager
+    # 8. Transfer task OVERSIGHT: tasks managed by old manager â†’ new manager
     await db.execute(
         update(Task).where(Task.manager_id == manager.id).values(manager_id=employee.id)
     )
 
-    # 9. Transfer ASSIGNED tasks: old manager's IC tasks → new employee (old manager)
-    #    and old employee's IC tasks → old manager (now employee)
+    # 9. Transfer ASSIGNED tasks: old manager's IC tasks â†’ new employee (old manager)
+    #    and old employee's IC tasks â†’ old manager (now employee)
     # Step A: temp sentinel to avoid overlapping update collisions
     TEMP_SENTINEL = -99999
     await db.execute(
@@ -610,4 +642,14 @@ async def swap_positions(
             "department_id": manager.department_id
         }
     }
+
+
+
+@router.post("/logout")
+async def logout(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Logs out by removing the current session, revoking its API key."""
+    if hasattr(current_user, "current_session_id"):
+        await db.execute(sql_delete(Session).where(Session.id == current_user.current_session_id))
+        await db.commit()
+    return {"detail": "Logged out successfully"}
 

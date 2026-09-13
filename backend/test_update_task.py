@@ -1,9 +1,11 @@
 import asyncio
-from app.database import AsyncSessionLocal
-from sqlalchemy.future import select
-from app.models import User, Task
-from app.auth import create_access_token
+
 import httpx
+from app.auth import create_access_token
+from app.database import AsyncSessionLocal
+from app.models import Task, User
+from sqlalchemy.future import select
+
 
 async def test_update_task():
     async with AsyncSessionLocal() as db:

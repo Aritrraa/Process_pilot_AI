@@ -1,4 +1,4 @@
-# Python virtual environments and caches
+﻿# Python virtual environments and caches
 __pycache__/
 *.pyc
 *.pyo
@@ -32,4 +32,8 @@ Thumbs.db
 
 # PDF documents
 *.pdf
+
+
+.coverage
+chroma_db/
 

@@ -3,16 +3,26 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.future import select
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from .config import settings
 from .database import Base, engine
-from .routes import auth, documents, meetings, tasks, settings as settings_routes, chat, analytics_routes, knowledge_graph_routes, ws
+from .routes import (
+    analytics_routes,
+    auth,
+    chat,
+    documents,
+    knowledge_graph_routes,
+    meetings,
+    tasks,
+    ws,
+)
+from .routes import settings as settings_routes
 
 # Configure structured logging
 logging.basicConfig(
@@ -69,8 +79,8 @@ async def _safe_populate_knowledge_graph():
     await asyncio.sleep(3)  # Give server a moment to fully bind port
     try:
         from .database import SessionLocal
-        from .models import User, Department, Document
         from .knowledge_graph import knowledge_graph
+        from .models import Department, Document, User
 
         async with SessionLocal() as db:
             # Auto-seed default departments if empty (critical for new DBs)
@@ -137,11 +147,7 @@ class DynamicCORSMiddleware(BaseHTTPMiddleware):
         # Handle preflight (OPTIONS) requests
         if request.method == "OPTIONS" and origin:
             is_allowed = False
-            if "localhost" in origin or "127.0.0.1" in origin:
-                is_allowed = True
-            elif origin.endswith(".vercel.app"):
-                is_allowed = True
-            elif origin in settings.BACKEND_CORS_ORIGINS:
+            if "localhost" in origin or "127.0.0.1" in origin or origin.endswith(".vercel.app") or origin in settings.BACKEND_CORS_ORIGINS:
                 is_allowed = True
 
             if is_allowed:
@@ -157,11 +163,7 @@ class DynamicCORSMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         if origin:
             is_allowed = False
-            if "localhost" in origin or "127.0.0.1" in origin:
-                is_allowed = True
-            elif origin.endswith(".vercel.app"):
-                is_allowed = True
-            elif origin in settings.BACKEND_CORS_ORIGINS:
+            if "localhost" in origin or "127.0.0.1" in origin or origin.endswith(".vercel.app") or origin in settings.BACKEND_CORS_ORIGINS:
                 is_allowed = True
 
             if is_allowed:
@@ -251,9 +253,10 @@ async def health_detailed():
 
     # Check database
     try:
+        from sqlalchemy import func
+
         from .database import SessionLocal
         from .models import Document
-        from sqlalchemy import func
         async with SessionLocal() as db:
             r = await db.execute(select(func.count(Document.id)))
             doc_count = r.scalar()

@@ -1,8 +1,20 @@
 import datetime
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, Float, JSON, Index
-from sqlalchemy.orm import relationship
+
 from pgvector.sqlalchemy import Vector
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.orm import relationship
+
 from .database import Base
+
 
 class Department(Base):
     __tablename__ = "departments"
@@ -30,6 +42,19 @@ class User(Base):
     settings = relationship("UserSetting", back_populates="user", uselist=False)
     memories = relationship("Memory", back_populates="user")
     agent_logs = relationship("AgentLog", back_populates="user")
+
+class Session(Base):
+    __tablename__ = "sessions"
+
+    id = Column(String, primary_key=True, index=True) # UUID
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime)
+    
+    llm_provider = Column(String, default="simulation")
+    gemini_api_key = Column(String, nullable=True)
+    groq_api_key = Column(String, nullable=True)
+    openai_api_key = Column(String, nullable=True)
 
 class UserSetting(Base):
     __tablename__ = "user_settings"

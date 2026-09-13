@@ -8,9 +8,8 @@ Uses a multi-layer approach:
 This module intercepts text BEFORE it is chunked and stored in ChromaDB or
 sent to any third-party LLM API, ensuring enterprise SOC2 compliance.
 """
-import re
 import logging
-from typing import Tuple
+import re
 
 logger = logging.getLogger("processpilot.pii")
 
@@ -45,7 +44,7 @@ except ImportError:
     logger.info("[PII] Presidio not installed — using regex-only redaction. Install with: pip install presidio-analyzer presidio-anonymizer")
 
 
-def redact_pii(text: str) -> Tuple[str, int]:
+def redact_pii(text: str) -> tuple[str, int]:
     """
     Redact PII from the given text.
     Returns:
@@ -81,7 +80,7 @@ def redact_pii(text: str) -> Tuple[str, int]:
     return text, redaction_count
 
 
-def redact_document(full_text: str) -> Tuple[str, int]:
+def redact_document(full_text: str) -> tuple[str, int]:
     """
     Run PII redaction on an entire document's extracted text before chunking.
     This is the main entry point called by ingestion.py.

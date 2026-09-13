@@ -7,11 +7,11 @@ Run after starting the server:
   cd backend
   python seed_demo.py
 """
-import requests
-import json
-import tempfile
 import os
 import sys
+import tempfile
+
+import requests
 
 # Reconfigure stdout to use UTF-8 to prevent UnicodeEncodeError on Windows
 if hasattr(sys.stdout, 'reconfigure'):
@@ -1020,7 +1020,7 @@ def seed():
 
     # â”€â”€ 1. Check server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
-        r = requests.get(f"http://localhost:8000/health", timeout=5)
+        r = requests.get("http://localhost:8000/health", timeout=5)
         if r.status_code == 200:
             print("\n[âœ“] Server is running")
         else:
@@ -1138,7 +1138,7 @@ def seed():
     print("\n" + "=" * 65)
     print("  âœ… Demo data seeded successfully!")
     print("=" * 65)
-    print("""
+    print(f"""
   ðŸ”‘ Login Credentials
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Admin:    admin@processpilot.ai  / admin123
@@ -1150,8 +1150,8 @@ def seed():
   ðŸ“š What was seeded
   â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Departments : 4 (Engineering, HR, Operations, Finance)
-  Documents   : {doc_count} enterprise knowledge documents
-  Tasks       : {task_count} (8 Pending, 5 In Progress, 9 Completed)
+  Documents   : {len(DOCS)} enterprise knowledge documents
+  Tasks       : {len(TASKS)} (8 Pending, 5 In Progress, 9 Completed)
   Meetings    : 4 with full transcripts
 
   ðŸŒ Access
@@ -1169,7 +1169,7 @@ def seed():
   - "How do we onboard new employees?"
   - "What happened in the Q3 infrastructure planning meeting?"
   - "What are our code review standards?"
-""".format(doc_count=len(DOCS), task_count=len(TASKS)))
+""")
 
 
 if __name__ == "__main__":

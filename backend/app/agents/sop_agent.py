@@ -1,10 +1,10 @@
-from typing import List, Optional
+
 from ..llm_client import LLMClient
 
 llm_client = LLMClient()
 
 class SOPAgent:
-    async def execute(self, query: str, context_chunks: List[str], api_key: Optional[str], llm_provider: str = "simulation", system_prompt: Optional[str] = None) -> str:
+    async def execute(self, query: str, context_chunks: list[str], api_key: str | None, llm_provider: str = "simulation", system_prompt: str | None = None) -> str:
         """
         Creates/formats SOPs or instructions.
         """

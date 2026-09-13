@@ -9,10 +9,9 @@ a permanent public URL.
 Falls back to local filesystem gracefully if SUPABASE_URL / SUPABASE_SERVICE_KEY
 env vars are not set (e.g. during local development).
 """
-import os
 import logging
+import os
 from uuid import uuid4
-from typing import Optional, Tuple
 
 from .config import settings
 
@@ -32,7 +31,7 @@ class StorageClient:
 
         if self._use_supabase:
             try:
-                from supabase import create_client, Client
+                from supabase import Client, create_client
                 self._supabase: Client = create_client(
                     settings.SUPABASE_URL,
                     settings.SUPABASE_KEY
@@ -59,7 +58,7 @@ class StorageClient:
     #  Public API                                                          #
     # ------------------------------------------------------------------ #
 
-    def upload(self, file_path: str, original_filename: str) -> Tuple[str, str]:
+    def upload(self, file_path: str, original_filename: str) -> tuple[str, str]:
         """
         Upload a file and return (storage_path, public_url).
 
@@ -112,7 +111,7 @@ class StorageClient:
     #  Private: Supabase Storage backend                                  #
     # ------------------------------------------------------------------ #
 
-    def _upload_supabase(self, file_path: str, unique_name: str) -> Tuple[str, str]:
+    def _upload_supabase(self, file_path: str, unique_name: str) -> tuple[str, str]:
         bucket = settings.SUPABASE_STORAGE_BUCKET
         storage_path = f"uploads/{unique_name}"
 
@@ -146,7 +145,7 @@ class StorageClient:
     #  Private: Local filesystem fallback                                 #
     # ------------------------------------------------------------------ #
 
-    def _upload_local(self, file_path: str, unique_name: str) -> Tuple[str, str]:
+    def _upload_local(self, file_path: str, unique_name: str) -> tuple[str, str]:
         import shutil
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
         local_path = os.path.join(settings.UPLOAD_DIR, unique_name)

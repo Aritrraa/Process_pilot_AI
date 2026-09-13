@@ -1,8 +1,9 @@
-from .base_agent import BaseAgent
 from sqlalchemy.orm import Session
+
+from ..llm_client import LLMClient
 from ..models import User
 from ..vectorstore import vector_store_manager
-from ..llm_client import LLMClient
+from .base_agent import BaseAgent
 
 llm_client = LLMClient()
 

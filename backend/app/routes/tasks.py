@@ -1,19 +1,18 @@
+import asyncio
+import json
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import List
-import json
-import asyncio
-import logging
 
 logger = logging.getLogger("processpilot.tasks")
 
-from .ws import manager
-
-from ..database import get_db
-from ..models import User, Task, AIFailure
-from ..schemas import TaskCreate, TaskUpdate, TaskResponse
 from ..auth import get_current_user
+from ..database import get_db
+from ..models import AIFailure, Task, User
+from ..schemas import TaskCreate, TaskResponse, TaskUpdate
+from .ws import manager
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -74,7 +73,7 @@ async def create_task(
         "created_at": task.created_at
     }
 
-@router.get("/", response_model=List[TaskResponse])
+@router.get("/", response_model=list[TaskResponse])
 async def list_tasks(
     skip: int = 0,
     limit: int = 50,
@@ -125,6 +124,7 @@ async def list_tasks(
 
 from ..abac import verify_task_access
 
+
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     task: Task = Depends(verify_task_access("read"))
@@ -147,7 +147,7 @@ async def update_task_status(
             try:
                 flywheel_log = AIFailure(
                     user_id=current_user.id,
-                    query=f"[Task Title Generation] Meeting-generated task",
+                    query="[Task Title Generation] Meeting-generated task",
                     response=task.ai_generated_title,
                     feedback_type="implicit_title_edit",
                     notes=f"Manager edited AI title to: '{task_update.title}'"
@@ -246,4 +246,3 @@ async def delete_task(
 ):
     await db.delete(task)
     await db.commit()
-    return

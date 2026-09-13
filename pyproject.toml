@@ -1,0 +1,23 @@
+[tool.ruff.lint]
+extend-ignore = [
+    "B008",
+    "BLE001",
+    "S110",
+    "DTZ003",
+    "RUF013",
+    "E722",
+    "RUF012",
+    "TRY201",
+    "G201",
+    "C403",
+    "DTZ005",
+    "LOG014",
+    "PIE810",
+    "F841",
+    "C401",
+    "ISC004",
+    "SIM102",
+    "PLW1508",
+    "RUF015",
+    "ASYNC251",
+]

@@ -1,12 +1,14 @@
-import os
-import logging
-import numpy as np
-import google.generativeai as genai
-from typing import List, Dict, Any, Optional
-import chromadb
 import hashlib
+import logging
+import os
+from typing import Any
+
+import chromadb
+import google.generativeai as genai
+import numpy as np
 from rank_bm25 import BM25Okapi
 from tenacity import retry, stop_after_attempt, wait_exponential
+
 from .config import settings
 
 logger = logging.getLogger("processpilot.vectorstore")
@@ -16,13 +18,13 @@ class EmbeddingProvider:
     Handles embeddings. Falls back to basic local numeric simulator 
     if Gemini/OpenAI API key is not configured or fails.
     """
-    def __init__(self, api_key: Optional[str] = None, llm_provider: str = "simulation"):
+    def __init__(self, api_key: str | None = None, llm_provider: str = "simulation"):
         self.api_key = api_key
         self.llm_provider = llm_provider
         if api_key and llm_provider == "gemini":
             genai.configure(api_key=api_key)
 
-    def get_embedding(self, text: str) -> List[float]:
+    def get_embedding(self, text: str) -> list[float]:
         def local_mock_embedding():
             # Stable hash-based deterministic vector generator (768 dimensions)
             state = int(hashlib.md5(text.encode("utf-8")).hexdigest(), 16) % 10000
@@ -70,10 +72,10 @@ class EmbeddingProvider:
             return local_mock_embedding()
 
 class BaseVectorStore:
-    def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]], api_key: Optional[str] = None, llm_provider: str = "simulation"):
+    def add_chunks(self, document_id: int, chunks: list[dict[str, Any]], api_key: str | None = None, llm_provider: str = "simulation"):
         raise NotImplementedError()
 
-    def search(self, query: str, limit: int = 5, department_id: Optional[int] = None, api_key: Optional[str] = None, llm_provider: str = "simulation") -> List[Dict[str, Any]]:
+    def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
         raise NotImplementedError()
 
     def delete_document_chunks(self, document_id: int):
@@ -84,14 +86,14 @@ class ChromaVectorStore(BaseVectorStore):
         self.client = None
         self._bm25_cache = {}
 
-    def _invalidate_bm25_cache(self, department_id: Optional[int]):
+    def _invalidate_bm25_cache(self, department_id: int | None):
         if department_id in self._bm25_cache:
             del self._bm25_cache[department_id]
         # Also invalidate global cache just in case
         if "global" in self._bm25_cache:
             del self._bm25_cache["global"]
 
-    def _get_bm25_index(self, collection, department_id: Optional[int]):
+    def _get_bm25_index(self, collection, department_id: int | None):
         cache_key = department_id if department_id is not None else "global"
         if cache_key not in self._bm25_cache:
             all_docs = collection.get()
@@ -115,12 +117,12 @@ class ChromaVectorStore(BaseVectorStore):
             os.makedirs(settings.CHROMA_PERSIST_DIR, exist_ok=True)
             self.client = chromadb.PersistentClient(path=settings.CHROMA_PERSIST_DIR)
 
-    def _get_collection(self, department_id: Optional[int]):
+    def _get_collection(self, department_id: int | None):
         self._init_client()
         coll_name = f"dept_{department_id}" if department_id is not None else "global_docs"
         return self.client.get_or_create_collection(name=coll_name)
 
-    def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]], api_key: Optional[str] = None, llm_provider: str = "simulation"):
+    def add_chunks(self, document_id: int, chunks: list[dict[str, Any]], api_key: str | None = None, llm_provider: str = "simulation"):
         if not chunks: return
         # Extract department_id from the first chunk's metadata
         department_id = chunks[0].get('metadata', {}).get('department_id')
@@ -153,7 +155,7 @@ class ChromaVectorStore(BaseVectorStore):
         
         self._invalidate_bm25_cache(department_id)
 
-    def search(self, query: str, limit: int = 5, department_id: Optional[int] = None, api_key: Optional[str] = None, llm_provider: str = "simulation") -> List[Dict[str, Any]]:
+    def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
         collection = self._get_collection(department_id)
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)
@@ -170,7 +172,7 @@ class ChromaVectorStore(BaseVectorStore):
                     "id": results['ids'][0][i],
                     "document": results['documents'][0][i],
                     "metadata": results['metadatas'][0][i],
-                    "distance": results['distances'][0][i] if 'distances' in results and results['distances'] else 0.0
+                    "distance": results['distances'][0][i] if results.get('distances') else 0.0
                 })
                 
         # --- BM25 Keyword Search ---
@@ -242,7 +244,7 @@ class PineconeVectorStore(BaseVectorStore):
             print(f"Failed to initialize Pinecone vector store: {e}")
             self.index = None
 
-    def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]], api_key: Optional[str] = None, llm_provider: str = "simulation"):
+    def add_chunks(self, document_id: int, chunks: list[dict[str, Any]], api_key: str | None = None, llm_provider: str = "simulation"):
         if not self.index:
             raise RuntimeError("Pinecone is not initialized.")
         provider = EmbeddingProvider(api_key, llm_provider)
@@ -260,7 +262,7 @@ class PineconeVectorStore(BaseVectorStore):
             vectors.append((chunk_id, emb, meta))
         self.index.upsert(vectors=vectors)
 
-    def search(self, query: str, limit: int = 5, department_id: Optional[int] = None, api_key: Optional[str] = None, llm_provider: str = "simulation") -> List[Dict[str, Any]]:
+    def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
         if not self.index:
             return []
         provider = EmbeddingProvider(api_key, llm_provider)
@@ -313,7 +315,7 @@ class QdrantVectorStore(BaseVectorStore):
             print(f"Failed to initialize Qdrant vector store: {e}")
             self.client = None
 
-    def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]], api_key: Optional[str] = None, llm_provider: str = "simulation"):
+    def add_chunks(self, document_id: int, chunks: list[dict[str, Any]], api_key: str | None = None, llm_provider: str = "simulation"):
         if not self.client:
             raise RuntimeError("Qdrant is not initialized.")
         from qdrant_client.models import PointStruct
@@ -332,10 +334,10 @@ class QdrantVectorStore(BaseVectorStore):
             points.append(PointStruct(id=chunk_id_int, vector=emb, payload=meta))
         self.client.upsert(collection_name=self.collection_name, points=points)
 
-    def search(self, query: str, limit: int = 5, department_id: Optional[int] = None, api_key: Optional[str] = None, llm_provider: str = "simulation") -> List[Dict[str, Any]]:
+    def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
         if not self.client:
             return []
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)
         
@@ -368,7 +370,7 @@ class QdrantVectorStore(BaseVectorStore):
 
     def delete_document_chunks(self, document_id: int):
         if self.client:
-            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            from qdrant_client.models import FieldCondition, Filter, MatchValue
             self.client.delete(
                 collection_name=self.collection_name,
                 points_selector=Filter(
@@ -388,7 +390,7 @@ class PGVectorStore(BaseVectorStore):
         from .database import SyncSessionLocal
         self.SessionLocal = SyncSessionLocal
 
-    def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]], api_key: Optional[str] = None, llm_provider: str = "simulation"):
+    def add_chunks(self, document_id: int, chunks: list[dict[str, Any]], api_key: str | None = None, llm_provider: str = "simulation"):
         if not chunks: return
         from .models import DocumentEmbedding
         provider = EmbeddingProvider(api_key, llm_provider)
@@ -422,7 +424,7 @@ class PGVectorStore(BaseVectorStore):
         finally:
             db.close()
 
-    def search(self, query: str, limit: int = 5, department_id: Optional[int] = None, api_key: Optional[str] = None, llm_provider: str = "simulation") -> List[Dict[str, Any]]:
+    def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
         from .models import DocumentEmbedding
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)
@@ -483,10 +485,10 @@ class VectorStoreManager:
                 print(f"Requested managed vector db ({db_type}) but missing key or URL. Falling back to local Chroma.")
             self.store = ChromaVectorStore()
 
-    def add_chunks(self, document_id: int, chunks: List[Dict[str, Any]], api_key: Optional[str] = None, llm_provider: str = "simulation"):
+    def add_chunks(self, document_id: int, chunks: list[dict[str, Any]], api_key: str | None = None, llm_provider: str = "simulation"):
         self.store.add_chunks(document_id, chunks, api_key, llm_provider)
 
-    def search(self, query: str, limit: int = 5, department_id: Optional[int] = None, api_key: Optional[str] = None, llm_provider: str = "simulation") -> List[Dict[str, Any]]:
+    def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
         return self.store.search(query, limit, department_id, api_key, llm_provider)
 
     def delete_document_chunks(self, document_id: int):

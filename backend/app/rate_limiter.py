@@ -3,17 +3,17 @@ Simple In-Memory Rate Limiter for ProcessPilot AI.
 Tracks rate limits per client IP in a standard Python dictionary.
 (Best for single-server deployments like Render Free Tier).
 """
-import time
 import asyncio
-from typing import Dict, List
-from fastapi import HTTPException, Request, status
 import logging
+import time
+
+from fastapi import HTTPException, Request, status
 
 logger = logging.getLogger("processpilot.rate_limiter")
 
 class InMemoryRateLimiter:
     def __init__(self):
-        self.requests: Dict[str, List[float]] = {}
+        self.requests: dict[str, list[float]] = {}
         self.lock = asyncio.Lock()
 
     async def check_rate_limit(self, key: str, limit: int, window: int):

@@ -1,15 +1,17 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
+from typing import Any, Literal
+
+from pydantic import BaseModel, EmailStr, Field
+
 
 # Auth Schemas
 class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6, max_length=128)
-    full_name: Optional[str] = None
-    role: Optional[Literal["Employee", "Manager", "Admin", "Director", "Contractor"]] = "Employee"
-    department_id: Optional[int] = None
-    manager_id: Optional[int] = None
+    full_name: str | None = None
+    role: Literal["Employee", "Manager", "Admin", "Director", "Contractor"] | None = "Employee"
+    department_id: int | None = None
+    manager_id: int | None = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -18,10 +20,10 @@ class UserLogin(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: EmailStr
-    full_name: Optional[str] = None
+    full_name: str | None = None
     role: str
-    department_id: Optional[int] = None
-    manager_id: Optional[int] = None
+    department_id: int | None = None
+    manager_id: int | None = None
     created_at: datetime
 
     class Config:
@@ -33,16 +35,16 @@ class Token(BaseModel):
     user: UserResponse
 
 class TokenData(BaseModel):
-    email: Optional[str] = None
-    user_id: Optional[int] = None
+    email: str | None = None
+    user_id: int | None = None
 
 # Settings
 class UserSettingsUpdate(BaseModel):
-    gemini_api_key: Optional[str] = None
-    groq_api_key: Optional[str] = None
-    openai_api_key: Optional[str] = None
-    llm_provider: Optional[Literal["simulation", "gemini", "groq", "openai"]] = "simulation"
-    system_prompt: Optional[str] = None
+    gemini_api_key: str | None = None
+    groq_api_key: str | None = None
+    openai_api_key: str | None = None
+    llm_provider: Literal["simulation", "gemini", "groq", "openai"] | None = "simulation"
+    system_prompt: str | None = None
 
 class UserSettingsResponse(BaseModel):
     id: int
@@ -50,8 +52,8 @@ class UserSettingsResponse(BaseModel):
     gemini_api_key_set: bool = False
     groq_api_key_set: bool = False
     openai_api_key_set: bool = False
-    llm_provider: Optional[str] = "simulation"
-    system_prompt: Optional[str] = None
+    llm_provider: str | None = "simulation"
+    system_prompt: str | None = None
     updated_at: datetime
 
     class Config:
@@ -74,12 +76,12 @@ class UserSettingsResponse(BaseModel):
 # Department Schemas
 class DepartmentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
+    description: str | None = None
 
 class DepartmentResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
     class Config:
         from_attributes = True
@@ -90,7 +92,7 @@ class DocumentResponse(BaseModel):
     title: str
     file_path: str
     file_type: str
-    department_id: Optional[int] = None
+    department_id: int | None = None
     uploaded_by: int
     ingestion_status: str
     created_at: datetime
@@ -103,7 +105,7 @@ class DocumentChunkResponse(BaseModel):
     document_id: int
     content: str
     chunk_index: int
-    metadata_json: Optional[Dict[str, Any]] = None
+    metadata_json: dict[str, Any] | None = None
 
     class Config:
         from_attributes = True
@@ -111,15 +113,15 @@ class DocumentChunkResponse(BaseModel):
 # Meeting Schemas
 class MeetingCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
-    transcript: Optional[str] = ""
-    meeting_link: Optional[str] = None
+    transcript: str | None = ""
+    meeting_link: str | None = None
 
 class MeetingResponse(BaseModel):
     id: int
     title: str
     transcript: str
-    meeting_link: Optional[str] = None
-    summary: Optional[str] = None
+    meeting_link: str | None = None
+    summary: str | None = None
     uploaded_by: int
     created_at: datetime
 
@@ -129,26 +131,26 @@ class MeetingResponse(BaseModel):
 # Task Schemas
 class TaskCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
-    description: Optional[str] = None
-    assigned_to: Optional[int] = None
-    document_id: Optional[int] = None
-    meeting_id: Optional[int] = None
+    description: str | None = None
+    assigned_to: int | None = None
+    document_id: int | None = None
+    meeting_id: int | None = None
 
 class TaskUpdate(BaseModel):
-    title: Optional[str] = None  # Data flywheel: track if manager edits AI-generated title
-    status: Optional[Literal["Pending", "In_Progress", "Completed"]] = None
-    assigned_to: Optional[int] = None
+    title: str | None = None  # Data flywheel: track if manager edits AI-generated title
+    status: Literal["Pending", "In_Progress", "Completed"] | None = None
+    assigned_to: int | None = None
 
 class TaskResponse(BaseModel):
     id: int
     title: str
-    description: Optional[str] = None
+    description: str | None = None
     status: str
-    assigned_to: Optional[int] = None
-    assignee_name: Optional[str] = None
-    manager_id: Optional[int] = None
-    document_id: Optional[int] = None
-    meeting_id: Optional[int] = None
+    assigned_to: int | None = None
+    assignee_name: str | None = None
+    manager_id: int | None = None
+    document_id: int | None = None
+    meeting_id: int | None = None
     created_at: datetime
 
     class Config:
@@ -160,7 +162,7 @@ class AgentLogResponse(BaseModel):
     user_id: int
     query: str
     response: str
-    agent_steps: Optional[List[Dict[str, Any]]] = None
+    agent_steps: list[dict[str, Any]] | None = None
     timestamp: datetime
 
     class Config:
@@ -184,12 +186,12 @@ class MemoryResponse(BaseModel):
 # Query Schemas
 class ChatQuery(BaseModel):
     query: str = Field(..., min_length=1, max_length=10000)
-    scope: Optional[List[str]] = None
+    scope: list[str] | None = None
     stream: bool = True
 
 # Pagination
 class PaginatedResponse(BaseModel):
-    items: List[Any]
+    items: list[Any]
     total: int
     page: int
     page_size: int

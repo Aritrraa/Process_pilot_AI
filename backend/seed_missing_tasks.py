@@ -1,8 +1,8 @@
 import asyncio
-from sqlalchemy.future import select
+
 from app.database import SessionLocal
-from app.models import User, Task
-from sqlalchemy import text
+from app.models import Task, User
+from sqlalchemy.future import select
 
 NEW_TASKS = [
     # Mark Somerhalder (Operations Manager)

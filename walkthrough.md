@@ -443,3 +443,33 @@ Then:
 > *"What should I change after learning from implementation?"*
 
 ProcessPilot AI is the result of that iterative process: **Problem → Design → Implementation → Failure → Investigation → Adaptation → Deployment.**
+
+## Session-Scoped API Credential Isolation
+
+### Problem
+The shared demo account originally caused API credentials to be shared between visitors. If Visitor A logged into the demo and provided an API key, Visitor B could log in and access or use Visitor A's API key.
+
+### Root Cause
+The credential was scoped to the user/account (UserSetting model) rather than the individual authenticated session.
+
+### Solution
+Implemented temporary session-scoped credentials.
+
+### Security model
+`	ext
+Shared demo account
+        ?
+Individual session (unique UUID generated on login)
+        ?
+Temporary encrypted credential (stored in sessions table)
+        ?
+24-hour maximum lifetime
+        ?
+Logout revocation (Session deleted on logout)
+`
+
+### Trade-off
+Instead of account-wide credentials (which is simpler for standard users), we introduced a sessions table that strictly scopes llm_provider and API keys to the active JWT session. This requires users to re-enter their API key upon their token expiring or explicitly logging out, trading long-term convenience for strict multi-tenant demo isolation.
+
+### Result
+Multiple visitors can use the same demo account simultaneously without sharing credentials. Raw API keys are masked in API responses, and the frontend UI has been simplified to explicitly show the temporary nature of the credential.

@@ -7,11 +7,11 @@ Run after starting the server:
   cd backend
   python seed_demo.py
 """
-import requests
-import json
-import tempfile
 import os
 import sys
+import tempfile
+
+import requests
 
 # Reconfigure stdout to use UTF-8 to prevent UnicodeEncodeError on Windows
 if hasattr(sys.stdout, 'reconfigure'):

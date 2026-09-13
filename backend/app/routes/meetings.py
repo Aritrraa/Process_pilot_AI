@@ -1,46 +1,44 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+import asyncio
+import json
+import os
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import Optional, List
-import os
-import json
-import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 MAX_CONCURRENT_TASKS = asyncio.Semaphore(2)
 
-from ..database import get_db
-from ..models import User, Meeting, Task, UserSetting
-from ..schemas import MeetingResponse, MeetingCreate
 from ..auth import get_current_user
-from ..config import settings
+from ..database import get_db
+from ..models import Meeting, Task, User
+from ..schemas import MeetingCreate, MeetingResponse
 
 router = APIRouter(prefix="/meetings", tags=["Meetings"])
 
 
 async def _get_llm_settings(user: User, db: AsyncSession):
-    """Helper: Returns (api_key, llm_provider) for the current user."""
+    """Helper: Returns (api_key, llm_provider) for the current user's session."""
     from ..crypto import decrypt_key
     
-    result = await db.execute(select(UserSetting).filter(UserSetting.user_id == user.id))
-    settings_record = result.scalars().first()
-    provider = settings_record.llm_provider if settings_record else "simulation"
+    session = getattr(user, "current_session", None)
+    provider = session.llm_provider if session else "simulation"
+    key = None
     
-    if provider == "gemini":
-        key = decrypt_key(settings_record.gemini_api_key) if settings_record else os.getenv("GEMINI_API_KEY")
-    elif provider == "groq":
-        key = decrypt_key(settings_record.groq_api_key) if settings_record else os.getenv("GROQ_API_KEY")
-    elif provider == "openai":
-        key = decrypt_key(settings_record.openai_api_key) if settings_record else os.getenv("OPENAI_API_KEY")
-    else:
-        key = None
+    if session:
+        if provider == "gemini":
+            key = decrypt_key(session.gemini_api_key) or os.getenv("GEMINI_API_KEY")
+        elif provider == "groq":
+            key = decrypt_key(session.groq_api_key) or os.getenv("GROQ_API_KEY")
+        elif provider == "openai":
+            key = decrypt_key(session.openai_api_key) or os.getenv("OPENAI_API_KEY")
         
     if not key:
         provider = "simulation"
     return key, provider
 
 
-def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[str], provider: str):
+def _analyze_meeting_transcript(transcript: str, title: str, api_key: str | None, provider: str):
     """
     Use LLM to generate meeting summary and action items.
     Falls back to simulation if no key is configured.
@@ -173,7 +171,7 @@ def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[s
                 return response.choices[0].message.content
             raw_text = _call_openai()
     except Exception as e:
-        summary = f"AI analysis failed ({provider}): {str(e)}"
+        summary = f"AI analysis failed ({provider}): {e!s}"
         tasks = [("Review transcript manually", f"AI processing failed for meeting: {title}")]
         return summary, tasks
 
@@ -199,7 +197,7 @@ def _analyze_meeting_transcript(transcript: str, title: str, api_key: Optional[s
                 if not t_desc:
                     t_desc = f"Action item from: {title}"
                 tasks.append((t_title, t_desc))
-    except Exception as e:
+    except Exception:
         summary = ""
         tasks = []
         if "SUMMARY:" in raw_text:
@@ -283,7 +281,7 @@ async def create_meeting(
     return meeting
 
 
-@router.get("/", response_model=List[MeetingResponse])
+@router.get("/", response_model=list[MeetingResponse])
 async def list_meetings(
     skip: int = 0,
     limit: int = 50,
@@ -323,6 +321,7 @@ async def list_meetings(
     return result.scalars().all()
 
 from ..abac import verify_meeting_access
+
 
 @router.get("/{meeting_id}", response_model=MeetingResponse)
 async def get_meeting(

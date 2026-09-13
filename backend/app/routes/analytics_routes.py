@@ -1,13 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import List
 
-from ..database import get_db
-from ..models import User, AIFailure, AgentLog
-from ..auth import get_current_user, check_role
 from ..analytics import get_system_analytics
+from ..auth import check_role, get_current_user
+from ..database import get_db
+from ..models import AgentLog, AIFailure, User
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
 

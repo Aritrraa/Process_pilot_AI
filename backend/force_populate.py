@@ -1,9 +1,10 @@
 import asyncio
 import logging
-from sqlalchemy import text
-from app.database import SessionLocal, engine
-from app.models import KGNode, KGEdge, User, Department, Document
+
+from app.database import SessionLocal
 from app.knowledge_graph import knowledge_graph
+from app.models import Department, Document, User
+from sqlalchemy import text
 from sqlalchemy.future import select
 
 logging.basicConfig(level=logging.INFO)

@@ -2,11 +2,11 @@
 Authentication API endpoint tests.
 Tests: registration, login, token validation, role restrictions, rate limiting.
 """
-import pytest
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from conftest import get_auth_token, auth_header
+from conftest import auth_header, get_auth_token
 
 
 class TestRegistration:
