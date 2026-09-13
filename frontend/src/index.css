@@ -1,4 +1,4 @@
-﻿/* ===== GLOBAL JAPANESE TEA HOUSE & BOTANICAL GARDEN DESIGN SYSTEM ===== */
+/* ===== GLOBAL JAPANESE TEA HOUSE & BOTANICAL GARDEN DESIGN SYSTEM ===== */
 
 :root {
   --sidebar-width: 280px;
@@ -1589,7 +1589,7 @@ tr:hover td { background: rgba(243, 241, 236, 0.4); }
   margin-top: auto;
 }
 
-/* Mobile header bar â€” hidden on desktop */
+/* Mobile header bar — hidden on desktop */
 .mobile-header-bar {
   display: none;
 }

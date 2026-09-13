@@ -51,7 +51,7 @@ function renderMarkdown(text) {
 
 function renderInline(text) {
   if (!text) return null;
-  // Sanitize input to prevent XSS â€” strip all HTML tags
+  // Sanitize input to prevent XSS — strip all HTML tags
   const clean = DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
   const parts = clean.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
   return parts.map((part, i) => {
@@ -152,7 +152,7 @@ export default function Chat() {
         // Prepend any leftover from previous chunk to handle TCP boundary splits
         const chunkStr = leftover + decoder.decode(value, { stream: true });
         const lines = chunkStr.split('\n');
-        // Last element may be an incomplete line â€” save for next iteration
+        // Last element may be an incomplete line — save for next iteration
         leftover = lines.pop() || '';
         
         for (const line of lines) {
@@ -249,7 +249,7 @@ export default function Chat() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 30px 14px 30px', borderBottom: '1px solid var(--border-subtle)', marginBottom: 4 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>AI Copilot</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Multi-agent RAG pipeline Â· Source-cited answers</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Multi-agent RAG pipeline · Source-cited answers</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className={`badge ${activeProvider === 'simulation' ? 'badge-neutral' : 'badge-green'}`}>
@@ -350,7 +350,7 @@ export default function Chat() {
                     <>
                       <div className="agent-toggle" onClick={() => toggleSteps(idx)}>
                         {msg.showSteps ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                        Agent pipeline Â· {msg.steps.length} steps
+                        Agent pipeline · {msg.steps.length} steps
                       </div>
                       {msg.showSteps && (
                         <div className="agent-steps-panel">
@@ -372,12 +372,12 @@ export default function Chat() {
                       )}
                     </>
                   )}
-                  {/* HITL Feedback Buttons â€” only for completed AI messages */}
+                  {/* HITL Feedback Buttons — only for completed AI messages */}
                   {msg.role === 'ai' && msg.content && !msg.isError && (
                     <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
                       {msg.feedback ? (
                         <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                          {msg.feedback === 'thumbs_up' ? 'âœ“ Marked as helpful' : 'âœ“ Feedback recorded'}
+                          {msg.feedback === 'thumbs_up' ? '✓ Marked as helpful' : '✓ Feedback recorded'}
                         </span>
                       ) : (
                         <>
@@ -431,7 +431,7 @@ export default function Chat() {
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-              placeholder="Ask about your documents, SOPs, policies, incidentsâ€¦"
+              placeholder="Ask about your documents, SOPs, policies, incidents…"
               disabled={loading}
             />
             <button
@@ -443,7 +443,7 @@ export default function Chat() {
             </button>
           </div>
         </div>
-        <div className="chat-hint">Press Enter to send Â· Shift+Enter for new line</div>
+        <div className="chat-hint">Press Enter to send · Shift+Enter for new line</div>
       </div>
     </div>
   );

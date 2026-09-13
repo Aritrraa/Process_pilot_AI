@@ -131,7 +131,7 @@ class CEOAgent:
             subordinates = [u for u in users if u.manager_id == user.id]
             if not subordinates:
                 return "According to the directory, no employees report directly to you."
-            team_list = "\n".join([f"- **{s.full_name}** ({s.email}) â€” ID: {s.id}" for s in subordinates])
+            team_list = "\n".join([f"- **{s.full_name}** ({s.email}) — ID: {s.id}" for s in subordinates])
             return f"The following employees report directly to you:\n{team_list}"
             
         # Helper to find a user by email username or full name in query
@@ -809,9 +809,9 @@ class CEOAgent:
                 if step["agent"] == "SearchAgent":
                     step["result"] = f"Success ({len(search_results)} chunks)" if not isinstance(res[0], Exception) else "Failed"
                 elif step["agent"] == "IncidentAgent":
-                    step["result"] = f"Success ({len(incident_results)} tickets)" if incident_results else "Completed â€” no relevant tickets"
+                    step["result"] = f"Success ({len(incident_results)} tickets)" if incident_results else "Completed — no relevant tickets"
                 elif step["agent"] == "GraphAgent":
-                    step["result"] = f"Success ({len(graph_results)} entities)" if graph_results else "Completed â€” no relevant graph context"
+                    step["result"] = f"Success ({len(graph_results)} entities)" if graph_results else "Completed — no relevant graph context"
             
             sources = list(set([r["metadata"].get("file_name", "Unknown File") for r in search_results]))
             yield update_steps()
@@ -904,10 +904,8 @@ class CEOAgent:
             yield f"data: {err_msg}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
-
 ceo_agent = CEOAgent()
 
 process_query = ceo_agent.process_query
 process_query_stream = ceo_agent.process_query_stream
-
 
