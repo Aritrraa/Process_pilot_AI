@@ -1,77 +1,53 @@
-import hashlib
 import logging
 import os
 from typing import Any
 
 import chromadb
-import google.generativeai as genai
-import numpy as np
 from rank_bm25 import BM25Okapi
-from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .config import settings
 
 logger = logging.getLogger("processpilot.vectorstore")
 
+
+
+EMBEDDING_MODEL = 'sentence-transformers/all-mpnet-base-v2'
+EMBEDDING_DIMENSION = 768
+
+_local_embedding_model = None
+
+def get_local_embedding(text: str) -> list[float]:
+    global _local_embedding_model
+    if _local_embedding_model is None:
+        import logging
+
+        from sentence_transformers import SentenceTransformer
+        logger = logging.getLogger(__name__)
+        logger.info(f"Loading canonical embedding model: {EMBEDDING_MODEL}")
+        _local_embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+    return _local_embedding_model.encode([text])[0].tolist()
+
 class EmbeddingProvider:
     """
-    Handles embeddings. Falls back to basic local numeric simulator
-    if Gemini/OpenAI API key is not configured or fails.
+    Canonical single-key embedding provider.
+    Always uses the consistent local embedding model (all-mpnet-base-v2, 768d)
+    for ALL paths (ingestion, query, re-ingestion, tests) regardless of the chat provider.
+    This guarantees 100% semantic alignment in pgvector and preserves single-key UX.
     """
     def __init__(self, api_key: str | None = None, llm_provider: str = "simulation"):
         self.api_key = api_key
         self.llm_provider = llm_provider
-        if api_key and llm_provider == "gemini":
-            genai.configure(api_key=api_key)
 
     def get_embedding(self, text: str) -> list[float]:
-        def local_mock_embedding():
-            # Stable hash-based deterministic vector generator (768 dimensions)
-            state = int(hashlib.md5(text.encode("utf-8")).hexdigest(), 16) % 10000
-            rng = np.random.default_rng(state)
-            vector = rng.standard_normal(768).tolist()
-            # Normalize vector
-            norm = sum(x**2 for x in vector)**0.5
-            return [x/norm for x in vector] if norm > 0 else vector
-
-        if not self.api_key or self.llm_provider == "simulation":
-            return local_mock_embedding()
-
-        if self.llm_provider == "openai":
-            try:
-                @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-                def _call_openai():
-                    from openai import OpenAI
-                    client = OpenAI(api_key=self.api_key)
-                    response = client.embeddings.create(
-                        input=[text],
-                        model="text-embedding-3-small",
-                        dimensions=768
-                    )
-                    return response.data[0].embedding
-                return _call_openai()
-            except Exception as e:
-                logger.warning(f"OpenAI embedding failed after retries, using local mock fallback: {e}")
-                return local_mock_embedding()
-
-        elif self.llm_provider == "gemini":
-            try:
-                @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-                def _call_gemini():
-                    response = genai.embed_content(
-                        model="models/text-embedding-004",
-                        content=text,
-                        task_type="retrieval_document"
-                    )
-                    return response['embedding']
-                return _call_gemini()
-            except Exception as e:
-                logger.warning(f"Gemini embedding failed after retries, using local mock fallback: {e}")
-                return local_mock_embedding()
-        else:
-            return local_mock_embedding()
+        if not text:
+            text = "empty"
+        # 100% Universal Local Embeddings
+        # We explicitly discard provider-native embeddings (OpenAI/Gemini)
+        # to ensure no mixed vector spaces exist in production.
+        return get_local_embedding(text)
 
 class BaseVectorStore:
+
     def add_chunks(self, document_id: int, chunks: list[dict[str, Any]], api_key: str | None = None, llm_provider: str = "simulation"):
         raise NotImplementedError()
 
@@ -415,13 +391,6 @@ class PGVectorStore(BaseVectorStore):
 
     def add_chunks(self, document_id: int, chunks: list[dict[str, Any]], api_key: str | None = None, llm_provider: str = "simulation"):
         if not chunks: return
-        if llm_provider not in ("openai", "gemini"):
-            raise ValueError("Production pgvector store requires a valid OpenAI or Gemini embedding provider. Mock embeddings are not permitted.")
-
-        if llm_provider not in ("openai", "gemini"):
-            # Return empty results rather than crashing the Chat UI, but do not use mock embeddings in production
-            print("Warning: Skipping pgvector search because a valid OpenAI/Gemini embedding provider is required.")
-            return []
 
         from .models import DocumentEmbedding
         provider = EmbeddingProvider(api_key, llm_provider)
@@ -456,10 +425,6 @@ class PGVectorStore(BaseVectorStore):
             db.close()
 
     def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
-        if llm_provider not in ("openai", "gemini"):
-            # Raise an error rather than silently returning empty context
-            raise ValueError("Production pgvector search requires a valid OpenAI or Gemini embedding provider. Mock embeddings are not permitted.")
-
         from .models import DocumentEmbedding
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)

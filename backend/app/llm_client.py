@@ -397,8 +397,10 @@ class LLMClient:
             stream=True
         )
         async for chunk in response:
-            if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+            if chunk.choices and len(chunk.choices) > 0:
+                content_val = chunk.choices[0].delta.content
+                if content_val is not None:
+                    yield content_val
 
     async def _stream_groq(self, api_key: str, system_prompt: str, user_message: str):
         from groq import AsyncGroq
@@ -447,8 +449,10 @@ class LLMClient:
                 raise e
 
         async for chunk in response:
-            if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
+            if chunk.choices and len(chunk.choices) > 0:
+                content_val = chunk.choices[0].delta.content
+                if content_val is not None:
+                    yield content_val
 
     def _simulate(self, user_message: str) -> str:
         """Offline simulation mode."""

@@ -564,10 +564,9 @@ class CEOAgent:
             if intent == "comparison" and comparison_results:
                 context_chunks.append(f"[Document Comparison Report]\n{comparison_results}")
 
-            # Assemble steps for agent logging
             steps = [
                 {"agent": "MemoryAgent", "action": "Retrieved past context", "result": f"Found {len(user_memories.splitlines())} items"},
-                {"agent": "SearchAgent", "action": "Failed: Embedding provider unavailable" if search_failed else f"Searched vector store (Dept: {user.department_id if dept_id else 'All'})", "result": "Error" if search_failed else f"Found {len(search_results)} relevant document segments"},
+                {"agent": "SearchAgent", "action": "Failed to query vector database" if search_failed else f"Searched vector store (Dept: {user.department_id if dept_id else 'All'})", "result": "Error" if search_failed else f"Found {len(search_results)} relevant document segments"},
                 {"agent": "IncidentAgent", "action": "Searched database ticket logs", "result": f"Found {len(incident_results)} tasks/tickets"},
                 {"agent": "GraphAgent", "action": "Queried local knowledge graph (Graph-RAG)", "result": f"Retrieved {len(graph_results)} connected entities"}
             ]
@@ -844,7 +843,7 @@ class CEOAgent:
             for step in steps:
                 if step["agent"] == "SearchAgent":
                     if isinstance(res[0], Exception):
-                        step["action"] = "Failed: Embedding provider unavailable"
+                        step["action"] = "Failed to query vector database"
                         step["result"] = "Error"
                     else:
                         step["result"] = f"Success ({len(search_results)} chunks)"
