@@ -64,8 +64,8 @@ def _ingest_document_background(
     document_id: int,
     file_path: str,
     file_ext: str,
-    api_key: str | None,
-    llm_provider: str,
+    embedding_api_key: str | None,
+    embedding_provider: str,
     department_id: int | None,
 ):
     """
@@ -117,7 +117,7 @@ def _ingest_document_background(
         # 5. Embed + upsert into pgvector / ChromaDB
         vector_store_manager.add_chunks(
             document_id, processed_chunks,
-            api_key=api_key, llm_provider=llm_provider
+            api_key=embedding_api_key, llm_provider=embedding_provider
         )
 
         document.ingestion_status = "done"
@@ -181,9 +181,33 @@ async def upload_document(
             api_key = decrypt_key(session.groq_api_key) or os.getenv("GROQ_API_KEY")
         elif llm_provider == "openai":
             api_key = decrypt_key(session.openai_api_key) or os.getenv("OPENAI_API_KEY")
-            
+
     if not api_key:
         llm_provider = "simulation"
+
+    # Determine Embedding Provider (Fallback to OpenAI/Gemini if Groq is used for Chat)
+    embedding_provider = llm_provider
+    embedding_api_key = api_key
+
+    if embedding_provider not in ("openai", "gemini"):
+        if session and session.openai_api_key:
+            embedding_provider = "openai"
+            embedding_api_key = decrypt_key(session.openai_api_key)
+        elif session and session.gemini_api_key:
+            embedding_provider = "gemini"
+            embedding_api_key = decrypt_key(session.gemini_api_key)
+        elif os.getenv("OPENAI_API_KEY"):
+            embedding_provider = "openai"
+            embedding_api_key = os.getenv("OPENAI_API_KEY")
+        elif os.getenv("GEMINI_API_KEY"):
+            embedding_provider = "gemini"
+            embedding_api_key = os.getenv("GEMINI_API_KEY")
+
+        if embedding_provider not in ("openai", "gemini") or not embedding_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A valid OpenAI or Gemini API key is required for document ingestion."
+            )
 
     # ── Upload validation ──────────────────────────────────────────────────
     file_ext = file.filename.split(".")[-1].lower() if file.filename and "." in file.filename else "bin"
@@ -194,10 +218,10 @@ async def upload_document(
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     temp_file_name = f"temp_{uuid.uuid4()}.{file_ext}"
     temp_file_path = os.path.join(settings.UPLOAD_DIR, temp_file_name)
-    
+
     file_size = 0
     max_size_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
-    
+
     try:
         async with aiofiles.open(temp_file_path, 'wb') as out_file:
             while content := await file.read(1024 * 1024):  # 1MB chunks
@@ -260,8 +284,8 @@ async def upload_document(
         document.id,
         temp_file_path,
         file_ext,
-        api_key,
-        llm_provider,
+        embedding_api_key,
+        embedding_provider,
         effective_dept,
     )
 

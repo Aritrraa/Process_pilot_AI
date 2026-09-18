@@ -398,6 +398,23 @@ class CEOAgent:
         if not api_key:
             llm_provider = "simulation"
 
+        # Determine Embedding Provider (Fallback to OpenAI/Gemini if Groq is used for Chat)
+        embedding_provider = llm_provider
+        embedding_api_key = api_key
+        if embedding_provider not in ("openai", "gemini"):
+            if session and session.openai_api_key:
+                embedding_provider = "openai"
+                embedding_api_key = decrypt_key(session.openai_api_key)
+            elif session and session.gemini_api_key:
+                embedding_provider = "gemini"
+                embedding_api_key = decrypt_key(session.gemini_api_key)
+            elif os.getenv("OPENAI_API_KEY"):
+                embedding_provider = "openai"
+                embedding_api_key = os.getenv("OPENAI_API_KEY")
+            elif os.getenv("GEMINI_API_KEY"):
+                embedding_provider = "gemini"
+                embedding_api_key = os.getenv("GEMINI_API_KEY")
+
         # Step 1: Memory (Fast retrieval of previous user preferences/context)
         try:
             user_memories = await self.memory_agent.get_memories(user.id, query, db)
@@ -508,13 +525,15 @@ class CEOAgent:
         else:
             # Apply role check/department isolation
             dept_id = None if user.role == "Admin" else user.department_id
+            search_failed = False
             try:
                 search_results = await asyncio.to_thread(
-                    self.search_agent.execute, query, dept_id, api_key, llm_provider
+                    self.search_agent.execute, query, dept_id, embedding_api_key, embedding_provider
                 )
             except Exception as search_err:
                 logger.warning(f"[SearchAgent] Failed: {search_err}")
                 search_results = []
+                search_failed = True
 
             # Run Incident Agent (DB metadata lookup)
             try:
@@ -548,7 +567,7 @@ class CEOAgent:
             # Assemble steps for agent logging
             steps = [
                 {"agent": "MemoryAgent", "action": "Retrieved past context", "result": f"Found {len(user_memories.splitlines())} items"},
-                {"agent": "SearchAgent", "action": f"Searched vector store (Dept: {user.department_id if dept_id else 'All'})", "result": f"Found {len(search_results)} relevant document segments"},
+                {"agent": "SearchAgent", "action": "Failed: Embedding provider unavailable" if search_failed else f"Searched vector store (Dept: {user.department_id if dept_id else 'All'})", "result": "Error" if search_failed else f"Found {len(search_results)} relevant document segments"},
                 {"agent": "IncidentAgent", "action": "Searched database ticket logs", "result": f"Found {len(incident_results)} tasks/tickets"},
                 {"agent": "GraphAgent", "action": "Queried local knowledge graph (Graph-RAG)", "result": f"Retrieved {len(graph_results)} connected entities"}
             ]
@@ -813,7 +832,7 @@ class CEOAgent:
             steps.append({"agent": "GraphAgent", "action": "Querying Knowledge Graph", "result": "Running..."})
             yield update_steps()
 
-            search_task = asyncio.to_thread(self.search_agent.execute, query, dept_id, api_key, llm_provider)
+            search_task = asyncio.to_thread(self.search_agent.execute, query, dept_id, embedding_api_key, embedding_provider)
             incident_task = self.incident_agent.execute(query, db)
             graph_task = self.graph_agent.execute(query, db)
 
@@ -824,7 +843,11 @@ class CEOAgent:
 
             for step in steps:
                 if step["agent"] == "SearchAgent":
-                    step["result"] = f"Success ({len(search_results)} chunks)" if not isinstance(res[0], Exception) else "Failed"
+                    if isinstance(res[0], Exception):
+                        step["action"] = "Failed: Embedding provider unavailable"
+                        step["result"] = "Error"
+                    else:
+                        step["result"] = f"Success ({len(search_results)} chunks)"
                 elif step["agent"] == "IncidentAgent":
                     step["result"] = f"Success ({len(incident_results)} tickets)" if incident_results else "Completed — no relevant tickets"
                 elif step["agent"] == "GraphAgent":

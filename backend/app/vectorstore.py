@@ -15,7 +15,7 @@ logger = logging.getLogger("processpilot.vectorstore")
 
 class EmbeddingProvider:
     """
-    Handles embeddings. Falls back to basic local numeric simulator 
+    Handles embeddings. Falls back to basic local numeric simulator
     if Gemini/OpenAI API key is not configured or fails.
     """
     def __init__(self, api_key: str | None = None, llm_provider: str = "simulation"):
@@ -36,7 +36,7 @@ class EmbeddingProvider:
 
         if not self.api_key or self.llm_provider == "simulation":
             return local_mock_embedding()
-            
+
         if self.llm_provider == "openai":
             try:
                 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
@@ -53,7 +53,7 @@ class EmbeddingProvider:
             except Exception as e:
                 logger.warning(f"OpenAI embedding failed after retries, using local mock fallback: {e}")
                 return local_mock_embedding()
-                
+
         elif self.llm_provider == "gemini":
             try:
                 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
@@ -99,17 +99,17 @@ class ChromaVectorStore(BaseVectorStore):
             all_docs = collection.get()
             if not all_docs or not all_docs['documents']:
                 return None, []
-            
+
             docs = all_docs['documents']
             ids = all_docs['ids']
             metadatas = all_docs['metadatas']
-            
+
             tokenized_corpus = [doc.lower().split(" ") for doc in docs]
             bm25 = BM25Okapi(tokenized_corpus)
-            
+
             items = [{"id": ids[i], "document": docs[i], "metadata": metadatas[i]} for i in range(len(docs))]
             self._bm25_cache[cache_key] = (bm25, items)
-            
+
         return self._bm25_cache[cache_key]
 
     def _init_client(self):
@@ -127,9 +127,9 @@ class ChromaVectorStore(BaseVectorStore):
         # Extract department_id from the first chunk's metadata
         department_id = chunks[0].get('metadata', {}).get('department_id')
         collection = self._get_collection(department_id)
-        
+
         provider = EmbeddingProvider(api_key, llm_provider)
-        
+
         # Batch writes in groups of 50 to prevent OOM on free-tier hosting
         BATCH_SIZE = 50
         for batch_start in range(0, len(chunks), BATCH_SIZE):
@@ -138,26 +138,26 @@ class ChromaVectorStore(BaseVectorStore):
             documents = []
             embeddings = []
             metadatas = []
-            
+
             for chunk in batch:
                 chunk_text = chunk['text']
                 chunk_id = f"doc_{document_id}_chunk_{chunk['index']}"
-                
+
                 ids.append(chunk_id)
                 documents.append(chunk_text)
                 embeddings.append(provider.get_embedding(chunk_text))
-                
+
                 meta = chunk.get('metadata', {})
                 meta.update({"document_id": document_id, "chunk_index": chunk['index']})
                 metadatas.append(meta)
-                
+
             collection.add(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
-        
+
         self._invalidate_bm25_cache(department_id)
 
     def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
         self._init_client()
-        
+
         if department_id is not None:
             collections = [self._get_collection(department_id)]
         else:
@@ -165,20 +165,20 @@ class ChromaVectorStore(BaseVectorStore):
             collections = [self.client.get_collection(c.name) for c in self.client.list_collections()]
             if not collections:
                 return []
-                
+
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)
-            
+
         formatted_results = []
         keyword_results = []
-        
+
         for collection in collections:
             try:
                 results = collection.query(
                     query_embeddings=[query_embedding],
                     n_results=limit
                 )
-                
+
                 if results and results['documents'] and results['documents'][0]:
                     for i in range(len(results['ids'][0])):
                         formatted_results.append({
@@ -189,7 +189,7 @@ class ChromaVectorStore(BaseVectorStore):
                         })
             except Exception:
                 pass
-                
+
             try:
                 # --- BM25 Keyword Search ---
                 c_dept_id = None
@@ -205,32 +205,32 @@ class ChromaVectorStore(BaseVectorStore):
                             keyword_results.append(items[idx])
             except Exception:
                 pass
-                
+
         # Only take global top N for semantic results based on distance before fusion
         formatted_results.sort(key=lambda x: x["distance"])
         formatted_results = formatted_results[:limit]
-        
+
         # --- Reciprocal Rank Fusion ---
         if not formatted_results and not keyword_results:
             return []
-            
+
         scores = {}
         fused_items = {}
-        
+
         for rank, res in enumerate(formatted_results):
             doc_id = res['id']
             if doc_id not in scores:
                 scores[doc_id] = 0
                 fused_items[doc_id] = res
             scores[doc_id] += 1.0 / (60 + rank)
-            
+
         for rank, res in enumerate(keyword_results):
             doc_id = res['id']
             if doc_id not in scores:
                 scores[doc_id] = 0
                 fused_items[doc_id] = res
             scores[doc_id] += 1.0 / (60 + rank)
-            
+
         sorted_docs = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         return [fused_items[doc_id] for doc_id, score in sorted_docs][:limit]
 
@@ -250,7 +250,7 @@ class PineconeVectorStore(BaseVectorStore):
             from pinecone import Pinecone, ServerlessSpec
             self.pc = Pinecone(api_key=settings.PINECONE_API_KEY)
             self.index_name = settings.PINECONE_INDEX
-            
+
             existing_indexes = [idx.name for idx in self.pc.list_indexes()]
             if self.index_name not in existing_indexes:
                 self.pc.create_index(
@@ -290,18 +290,18 @@ class PineconeVectorStore(BaseVectorStore):
             return []
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)
-        
+
         filter_dict = {}
         if department_id is not None:
             filter_dict["department_id"] = department_id
-            
+
         results = self.index.query(
             vector=query_embedding,
             top_k=limit,
             include_metadata=True,
             filter=filter_dict if filter_dict else None
         )
-        
+
         formatted_results = []
         for match in results.get('matches', []):
             metadata = match.get('metadata', {})
@@ -328,7 +328,7 @@ class QdrantVectorStore(BaseVectorStore):
                 api_key=settings.QDRANT_API_KEY
             )
             self.collection_name = "processpilot_chunks"
-            
+
             if not self.client.collection_exists(self.collection_name):
                 self.client.create_collection(
                     collection_name=self.collection_name,
@@ -363,7 +363,7 @@ class QdrantVectorStore(BaseVectorStore):
         from qdrant_client.models import FieldCondition, Filter, MatchValue
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)
-        
+
         query_filter = None
         if department_id is not None:
             query_filter = Filter(
@@ -371,14 +371,14 @@ class QdrantVectorStore(BaseVectorStore):
                     FieldCondition(key="department_id", match=MatchValue(value=department_id))
                 ]
             )
-            
+
         results = self.client.search(
             collection_name=self.collection_name,
             query_vector=query_embedding,
             limit=limit,
             query_filter=query_filter
         )
-        
+
         formatted_results = []
         for hit in results:
             payload = hit.payload or {}
@@ -405,7 +405,7 @@ class QdrantVectorStore(BaseVectorStore):
 
 class PGVectorStore(BaseVectorStore):
     """Native PostgreSQL vector store using pgvector via SQLAlchemy.
-    
+
     Uses a SYNCHRONOUS session because all methods run inside asyncio.to_thread
     (background threads) — never directly on the async event loop.
     """
@@ -415,9 +415,17 @@ class PGVectorStore(BaseVectorStore):
 
     def add_chunks(self, document_id: int, chunks: list[dict[str, Any]], api_key: str | None = None, llm_provider: str = "simulation"):
         if not chunks: return
+        if llm_provider not in ("openai", "gemini"):
+            raise ValueError("Production pgvector store requires a valid OpenAI or Gemini embedding provider. Mock embeddings are not permitted.")
+
+        if llm_provider not in ("openai", "gemini"):
+            # Return empty results rather than crashing the Chat UI, but do not use mock embeddings in production
+            print("Warning: Skipping pgvector search because a valid OpenAI/Gemini embedding provider is required.")
+            return []
+
         from .models import DocumentEmbedding
         provider = EmbeddingProvider(api_key, llm_provider)
-        
+
         department_id = chunks[0].get('metadata', {}).get('department_id')
 
         db = self.SessionLocal()
@@ -426,9 +434,9 @@ class PGVectorStore(BaseVectorStore):
                 chunk_text = chunk['text']
                 chunk_id = f"doc_{document_id}_chunk_{chunk['index']}"
                 emb = provider.get_embedding(chunk_text)
-                
+
                 meta = chunk.get('metadata', {})
-                
+
                 doc_emb = DocumentEmbedding(
                     id=chunk_id,
                     document_id=document_id,
@@ -448,26 +456,30 @@ class PGVectorStore(BaseVectorStore):
             db.close()
 
     def search(self, query: str, limit: int = 5, department_id: int | None = None, api_key: str | None = None, llm_provider: str = "simulation") -> list[dict[str, Any]]:
+        if llm_provider not in ("openai", "gemini"):
+            # Raise an error rather than silently returning empty context
+            raise ValueError("Production pgvector search requires a valid OpenAI or Gemini embedding provider. Mock embeddings are not permitted.")
+
         from .models import DocumentEmbedding
         provider = EmbeddingProvider(api_key, llm_provider)
         query_embedding = provider.get_embedding(query)
-        
+
         db = self.SessionLocal()
         try:
             # Query using pgvector cosine distance operator (<=>)
             q = db.query(DocumentEmbedding).order_by(
                 DocumentEmbedding.embedding.cosine_distance(query_embedding)
             )
-            
+
             if department_id is not None:
                 q = q.filter(DocumentEmbedding.department_id == department_id)
-                
+
             results = q.limit(limit).all()
-            
+
             formatted_results = []
             for r in results:
                 distance = r.embedding.cosine_distance(query_embedding) if hasattr(r.embedding, 'cosine_distance') else 0.0
-                
+
                 formatted_results.append({
                     "id": r.id,
                     "document": r.text,
@@ -490,10 +502,10 @@ class PGVectorStore(BaseVectorStore):
 class VectorStoreManager:
     def __init__(self):
         self.store = None
-        
+
         # Check if we are running in Postgres mode
         is_postgres = "postgresql" in settings.DATABASE_URL or "postgres" in settings.DATABASE_URL
-        
+
         db_type = settings.VECTOR_DB_TYPE.lower()
         if db_type == "pinecone" and settings.PINECONE_API_KEY:
             self.store = PineconeVectorStore()
@@ -502,7 +514,7 @@ class VectorStoreManager:
         elif is_postgres:
             # Native PostgreSQL vector store using pgvector!
             self.store = PGVectorStore()
-            
+
         if not self.store:
             if db_type in ("pinecone", "qdrant"):
                 print(f"Requested managed vector db ({db_type}) but missing key or URL. Falling back to local Chroma.")
