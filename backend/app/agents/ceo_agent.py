@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import datetime
 import json
 import logging
@@ -68,7 +68,7 @@ class CEOAgent:
         r_users = await db.execute(select(User))
         all_users = r_users.scalars().all()
         user_map = {u.id: u for u in all_users}
-        
+
         if user.role == "Admin":
             filtered_users = all_users[:20]
         else:
@@ -76,14 +76,14 @@ class CEOAgent:
             dept_users = [u for u in all_users if u.department_id == user.department_id]
             manager = user_map.get(user.manager_id) if user.manager_id else None
             reports = [u for u in all_users if u.manager_id == user.id]
-            
+
             seen = set()
             filtered_users = []
             for u in dept_users + ([manager] if manager else []) + reports:
                 if u.id not in seen:
                     seen.add(u.id)
                     filtered_users.append(u)
-            
+
             # Sort by ID for stability
             filtered_users.sort(key=lambda u: u.id)
             filtered_users = filtered_users[:20]
@@ -104,18 +104,18 @@ class CEOAgent:
         is_directory_query = any(x in q for x in ["manager", "report", "who is", "email", "contact", "phone", "details", "team", "reports to", "work under", "id details"])
         if not is_directory_query:
             return None
-            
+
         r_users = await db.execute(select(User))
         users = r_users.scalars().all()
         user_map = {u.id: u for u in users}
-        
+
         # 1. Employee asks "who is the current hr manager"
         if "hr manager" in q or "human resources manager" in q:
             hr_mgr = next((u for u in users if u.role == "Manager" and u.department_id == 2), None) # HR department id is 2
             if hr_mgr:
                 return f"The current HR Manager is **{hr_mgr.full_name}** ({hr_mgr.email})."
             return "No HR Manager could be found in the system."
-            
+
         # 2. General manager query: "who is my manager" or "who do i report to"
         if "my manager" in q or "who do i report to" in q or "who is my boss" in q:
             if user.manager_id and user.manager_id in user_map:
@@ -126,14 +126,14 @@ class CEOAgent:
             elif user.role == "Manager":
                 return "You are a Manager. You report directly to the executive leadership team."
             return "No manager is assigned to your profile in the directory."
-            
+
         if "who reports to me" in q or "my team" in q or "my employees" in q:
             subordinates = [u for u in users if u.manager_id == user.id]
             if not subordinates:
                 return "According to the directory, no employees report directly to you."
             team_list = "\n".join([f"- **{s.full_name}** ({s.email}) — ID: {s.id}" for s in subordinates])
             return f"The following employees report directly to you:\n{team_list}"
-            
+
         # Helper to find a user by email username or full name in query
         target_user = None
         for u in users:
@@ -142,14 +142,14 @@ class CEOAgent:
             if username in q or (u.full_name and u.full_name.lower() in q) or (name_parts and any(part in q for part in name_parts if len(part) > 2)):
                 target_user = u
                 break
-                
+
         # 3. Specific contact request: e.g. "provide the email of Rohan" or "what is john's email"
         if target_user:
             # Check permissions
             # Admin can ask about anyone
             if user.role == "Admin":
                 return f"User details for **{target_user.full_name}**:\n- **Email**: {target_user.email}\n- **User ID**: {target_user.id}\n- **Role**: {target_user.role}"
-                
+
             # Manager can ask about their direct reports
             if user.role == "Manager":
                 if target_user.manager_id == user.id:
@@ -158,7 +158,7 @@ class CEOAgent:
                     return f"Your details:\n- **Email**: {target_user.email}\n- **User ID**: {target_user.id}"
                 else:
                     return "Sorry, due to privacy policy, you can only access contact details of members in your direct team."
-                    
+
             # Employee can ask about manager, peer, or HR manager
             if user.role == "Employee":
                 # Check if target is their manager
@@ -174,7 +174,7 @@ class CEOAgent:
                     return f"Your details:\n- **Email**: {target_user.email}\n- **User ID**: {target_user.id}"
                 else:
                     return "Sorry, you only have permission to view contact details of your manager, team peers, or the HR manager."
-                    
+
         # 4. If someone asks general queries about reporting hierarchy
         if "reports to" in q or "works under" in q:
             for u in users:
@@ -186,7 +186,7 @@ class CEOAgent:
                         return f"The following employees report to **{u.full_name}**:\n" + "\n".join([f"- **{r.full_name}** ({r.email})" for r in reports])
                     else:
                         return "Sorry, you do not have permission to view this reporting structure."
-                        
+
         return None
 
     async def _build_conversation_history(self, db: AsyncSession, user: User, max_tokens: int = 2500) -> str:
@@ -194,17 +194,17 @@ class CEOAgent:
         logs = r_logs.scalars().all()
         if not logs:
             return "No previous conversation history."
-            
+
         try:
             import tiktoken
             enc = tiktoken.get_encoding("cl100k_base")
         except Exception:
             enc = None
-            
+
         history_chunks = []
         current_tokens = 0
         truncated = False
-        
+
         for log in logs:
             turn = f"User: {log.query}\nProcessPilot AI: {log.response}\n"
             if enc:
@@ -214,10 +214,10 @@ class CEOAgent:
                     break
                 current_tokens += tokens
             history_chunks.append(turn)
-            
+
         if truncated:
             history_chunks.append("[System Note: Earlier conversation history was summarized/truncated to preserve LLM context window limits.]\n")
-            
+
         history_chunks.reverse()
         return "\n".join(history_chunks)
 
@@ -242,10 +242,10 @@ class CEOAgent:
                 "pending_action": None,
                 "history": []
             }
-        
+
         session = ACTIVE_AGENT_SESSIONS[user.id]
         session["turns"] += 1
-        
+
         # Safe turn limit checkpoint to prevent infinite agent/tool call execution loops
         if session["turns"] > 10:
             session["turns"] = 0
@@ -265,7 +265,7 @@ class CEOAgent:
                 {"agent": "MemoryAgent", "action": "Skipped memory lookup for directory query", "result": "Success"},
                 {"agent": "CEOAgent", "action": "Queried live database org directory (RBAC enforced)", "result": "Success"}
             ]
-            
+
             # Log this agent session
             agent_log = AgentLog(
                 user_id=user.id,
@@ -275,7 +275,7 @@ class CEOAgent:
             )
             db.add(agent_log)
             await db.commit()
-            
+
             return {
                 "answer": org_answer,
                 "sources": [],
@@ -288,9 +288,9 @@ class CEOAgent:
             action = session["pending_action"]
             session["pending_action"] = None
             session["turns"] = 0
-            
+
             steps = [{"agent": "CEOAgent", "action": "Process Human approval checkpoint", "result": "Success"}]
-            
+
             if query.lower() in ("yes", "approve", "proceed", "confirm", "y"):
                 if action["type"] == "create_task":
                     try:
@@ -319,7 +319,7 @@ class CEOAgent:
             else:
                 ans = "âŒ **Action Cancelled.** Operation aborted by user."
                 steps.append({"agent": "CEOAgent", "action": "Action Rejected", "result": "Aborted"})
-                
+
             agent_log = AgentLog(
                 user_id=user.id,
                 query=query,
@@ -337,7 +337,7 @@ class CEOAgent:
             title = "Extracted Action Item"
             desc = f"Action item created from query: {query}"
             assigned_to = user.id
-            
+
             # Simple keyword matching to find assignee name in directory
             try:
                 r_users = await db.execute(select(User))
@@ -348,7 +348,7 @@ class CEOAgent:
                         break
             except:
                 pass
-                
+
             session["pending_action"] = {
                 "type": "create_task",
                 "data": {
@@ -381,11 +381,11 @@ class CEOAgent:
         r_set = await db.execute(select(UserSetting).filter(UserSetting.user_id == user.id))
         settings_record = r_set.scalars().first()
         system_prompt = settings_record.system_prompt if settings_record else None
-        
+
         from app.crypto import decrypt_key
         session = getattr(user, "current_session", None)
         llm_provider = session.llm_provider if session else "simulation"
-        
+
         if llm_provider == "gemini":
             api_key = decrypt_key(session.gemini_api_key) if session and session.gemini_api_key else os.getenv("GEMINI_API_KEY")
         elif llm_provider == "groq":
@@ -394,10 +394,10 @@ class CEOAgent:
             api_key = decrypt_key(session.openai_api_key) if session and session.openai_api_key else os.getenv("OPENAI_API_KEY")
         else:
             api_key = None
-            
+
         if not api_key:
             llm_provider = "simulation"
-        
+
         # Step 1: Memory (Fast retrieval of previous user preferences/context)
         try:
             user_memories = await self.memory_agent.get_memories(user.id, query, db)
@@ -413,18 +413,18 @@ class CEOAgent:
             intent = "sop"
         else:
             intent = "general"
-        
+
         # Step 3: Run Search Agent, Incident Agent, Graph Agent, or Scoped Filtering
         if scope:
             context_chunks = []
             sources = []
             incident_results = []
             graph_results = []
-            
+
             doc_ids = []
             meet_ids = []
             task_ids = []
-            
+
             for s in scope:
                 if s.startswith("doc_"):
                     try: doc_ids.append(int(s.split("_")[1]))
@@ -449,12 +449,12 @@ class CEOAgent:
                         elif n_id.startswith("task_"):
                             try: task_ids.append(int(n_id.split("_")[1]))
                             except: pass
-            
+
             # Deduplicate IDs to avoid duplicate processing of linked files/tasks
             doc_ids = list(set(doc_ids))
             meet_ids = list(set(meet_ids))
             task_ids = list(set(task_ids))
-            
+
             # Fetch scoped documents
             if doc_ids:
                 r_docs = await db.execute(select(Document).filter(Document.id.in_(doc_ids)))
@@ -465,7 +465,7 @@ class CEOAgent:
                     chunks = r_chunks.scalars().all()
                     for chunk in chunks:
                         context_chunks.append(f"[Document: {d.title}] {chunk.content}")
-            
+
             # Fetch scoped meetings
             if meet_ids:
                 r_meets = await db.execute(select(Meeting).filter(Meeting.id.in_(meet_ids)))
@@ -477,7 +477,7 @@ class CEOAgent:
                         f"Summary: {m.summary or 'No summary'}\n"
                         f"Transcript:\n{m.transcript}"
                     )
-            
+
             # Fetch scoped tasks
             if task_ids:
                 r_tasks = await db.execute(select(Task).filter(Task.id.in_(task_ids)))
@@ -497,10 +497,10 @@ class CEOAgent:
                         f"Status: {t.status}\n"
                         f"Created At: {t.created_at.strftime('%Y-%m-%d')}"
                     )
-            
+
             # Deduplicate sources
             sources = list(set(sources))
-            
+
             steps = [
                 {"agent": "MemoryAgent", "action": "Retrieved past context", "result": f"Found {len(user_memories.splitlines())} items"},
                 {"agent": "SearchAgent", "action": "Applied Knowledge Graph scope filters", "result": f"Loaded {len(doc_ids)} documents, {len(meet_ids)} meetings, {len(task_ids)} tasks"}
@@ -515,19 +515,19 @@ class CEOAgent:
             except Exception as search_err:
                 logger.warning(f"[SearchAgent] Failed: {search_err}")
                 search_results = []
-            
+
             # Run Incident Agent (DB metadata lookup)
             try:
                 incident_results = await self.incident_agent.execute(query, db)
             except Exception:
                 incident_results = []
-            
+
             # Run Graph Agent (Knowledge Graph Graph-RAG lookup)
             try:
                 graph_results = await self.graph_agent.execute(query, db)
             except Exception:
                 graph_results = []
-            
+
             # Classify query intent: drives routing to SOP, Comparison, or standard Q&A paths
             # (intent already computed above; block kept for inline documentation only)
 
@@ -535,13 +535,13 @@ class CEOAgent:
             comparison_results = ""
             if intent == "comparison":
                 comparison_results = await self.comparison_agent.execute(query, user, db, api_key=api_key, llm_provider=llm_provider)
-            
+
             # Construct full context
             context_chunks = [res["document"] for res in search_results]
             sources = [res["metadata"].get("file_name", "Unknown File") for res in search_results]
             # Remove duplicate sources
             sources = list(set(sources))
-            
+
             if intent == "comparison" and comparison_results:
                 context_chunks.append(f"[Document Comparison Report]\n{comparison_results}")
 
@@ -554,7 +554,7 @@ class CEOAgent:
             ]
             if intent == "comparison":
                 steps.append({"agent": "ComparisonAgent", "action": "Compared documents", "result": "Generated comparison report"})
-        
+
         # Step 6: Query LLM (or fallback) for final response
         if intent == "sop":
             steps.append({"agent": "SOPAgent", "action": f"Generating structured markdown procedure using {llm_provider}", "result": "Success"})
@@ -562,13 +562,13 @@ class CEOAgent:
         else:
             from ..analytics import get_system_analytics
             analytics_data = await get_system_analytics(db, user)
-            
+
             # Format analytics details nicely
             analytics_summary = []
             analytics_summary.append("System & Team Analytics Overview:")
             analytics_summary.append(f"- Documentation Health Score: {analytics_data.get('documentation_health')}%")
             analytics_summary.append(f"- Task Status Distribution: {analytics_data.get('task_status')}")
-            
+
             team_workload = analytics_data.get("team_workload", [])
             if team_workload:
                 analytics_summary.append("- Team Members Workload & Progress:")
@@ -580,7 +580,7 @@ class CEOAgent:
             analytics_info = "\n".join(analytics_summary)
 
             directory_info = await self._get_org_directory(db, user)
-            
+
             # Query the database for the active user's assigned tasks list
             r_t = await db.execute(select(Task).filter(Task.assigned_to == user.id))
             user_tasks = r_t.scalars().all()
@@ -594,7 +594,7 @@ class CEOAgent:
             else:
                 user_tasks_summary.append("You currently have no tasks assigned to you.")
             user_tasks_info = "\n".join(user_tasks_summary)
-            
+
             conversation_history = await self._build_conversation_history(db, user)
 
             prompt = (
@@ -626,13 +626,13 @@ class CEOAgent:
                 "Related Tickets/Incidents:\n" + str(incident_results) + "\n\n"
                 "Answer the user clearly. Highlight steps, source citations, and any related incidents/tickets if applicable."
             )
-            
+
             # Context window tracking feature to be implemented here
             # Add token count calculation or truncate history...
-            
+
             if system_prompt:
                 prompt = f"System Instruction: {system_prompt}\n\n{prompt}"
-                
+
             if llm_provider == "simulation":
                 # Simulating a professional response if API Key is not set
                 if any(x in query.lower() for x in ["progress", "workload", "team working", "how is my team", "analytics", "status of tasks", "team reports"]):
@@ -640,7 +640,7 @@ class CEOAgent:
                     summary_parts = []
                     summary_parts.append("**ProcessPilot AI Response (Simulation Mode)**\n\n")
                     summary_parts.append("Here is the current status and progress of your team based on live database metrics:\n\n")
-                    
+
                     if team_workload:
                         for member in team_workload:
                             total = member["pending"] + member["in_progress"] + member["completed"]
@@ -653,19 +653,19 @@ class CEOAgent:
                             )
                     else:
                         summary_parts.append("No subordinates or team member workload details were found for your profile.")
-                        
+
                     summary_parts.append(f"\n*Overall Task Distribution: Completed: {analytics_data['task_status']['Completed']}, In Progress: {analytics_data['task_status']['In_Progress']}, Pending: {analytics_data['task_status']['Pending']}*")
                     answer = "\n".join(summary_parts)
                 else:
                     source_citation = f" [Source: {sources[0]}]" if sources else ""
                     ticket_citation = f" [Ticket Reference: {incident_results[0]['title']}]" if incident_results else ""
-                    
+
                     graph_citation = ""
                     if graph_results:
                         first_ent = graph_results[0]
                         conns = ", ".join([f"{c['relationship']} {c['target']}" for c in first_ent['connections']])
                         graph_citation = f"\n- **Knowledge Graph Match**: Found entity '{first_ent['entity_id']}' ({first_ent['type']}) linked to [{conns}]"
-                        
+
                     answer = (
                         f"**ProcessPilot AI Response (Simulation Mode)**\n\n"
                         f"Based on your query *\"{query}\"*, I retrieved relevant corporate information from "
@@ -687,7 +687,7 @@ class CEOAgent:
                     user_id=user.id
                 )
                 steps.append({"agent": "CEOAgent", "action": f"Synthesized response via {llm_provider}", "result": "Success"})
-                    
+
         # Step 7: Update Long-Term Memory if the query contains important personal settings or context
         if "remember" in query.lower() or "my name is" in query.lower() or "deploy" in query.lower() or len(query) > 20:
             try:
@@ -695,7 +695,7 @@ class CEOAgent:
             except Exception:
                 pass
             steps.append({"agent": "MemoryAgent", "action": "Stored key-value context to long-term memory", "result": "Success"})
-            
+
         # Log this agent session
         agent_log = AgentLog(
             user_id=user.id,
@@ -705,11 +705,11 @@ class CEOAgent:
         )
         db.add(agent_log)
         await db.commit()
-        
+
         # Reset turns on successful completion of active query
         if user.id in ACTIVE_AGENT_SESSIONS:
             ACTIVE_AGENT_SESSIONS[user.id]["turns"] = 0
-            
+
         return {
             "answer": answer,
             "sources": sources,
@@ -733,7 +733,7 @@ class CEOAgent:
             api_key = None
             llm_provider = "simulation"
             system_prompt = user_settings.system_prompt if user_settings else None
-            
+
             session = getattr(user, "current_session", None)
             if session:
                 from app.crypto import decrypt_key
@@ -741,16 +741,33 @@ class CEOAgent:
                 if llm_provider == "gemini" and session.gemini_api_key: api_key = decrypt_key(session.gemini_api_key)
                 elif llm_provider == "openai" and session.openai_api_key: api_key = decrypt_key(session.openai_api_key)
                 elif llm_provider == "groq" and session.groq_api_key: api_key = decrypt_key(session.groq_api_key)
-                
+
                 if not api_key:
                     if llm_provider == "gemini": api_key = os.getenv("GEMINI_API_KEY")
                     elif llm_provider == "openai": api_key = os.getenv("OPENAI_API_KEY")
                     elif llm_provider == "groq": api_key = os.getenv("GROQ_API_KEY")
 
+            # Determine Embedding Provider (Fallback to OpenAI/Gemini if Groq is used for Chat)
+            embedding_provider = llm_provider
+            embedding_api_key = api_key
+            if embedding_provider not in ("openai", "gemini"):
+                if session and session.openai_api_key:
+                    embedding_provider = "openai"
+                    embedding_api_key = decrypt_key(session.openai_api_key)
+                elif session and session.gemini_api_key:
+                    embedding_provider = "gemini"
+                    embedding_api_key = decrypt_key(session.gemini_api_key)
+                elif os.getenv("OPENAI_API_KEY"):
+                    embedding_provider = "openai"
+                    embedding_api_key = os.getenv("OPENAI_API_KEY")
+                elif os.getenv("GEMINI_API_KEY"):
+                    embedding_provider = "gemini"
+                    embedding_api_key = os.getenv("GEMINI_API_KEY")
+
             steps = []
             sources = []
             incident_results = []
-            
+
             def update_steps():
                 return f"data: {json.dumps({'type': 'metadata', 'sources': sources, 'incidents': incident_results, 'steps': steps})}\n\n"
 
@@ -799,7 +816,7 @@ class CEOAgent:
             search_task = asyncio.to_thread(self.search_agent.execute, query, dept_id, api_key, llm_provider)
             incident_task = self.incident_agent.execute(query, db)
             graph_task = self.graph_agent.execute(query, db)
-            
+
             res = await asyncio.gather(search_task, incident_task, graph_task, return_exceptions=True)
             search_results = res[0] if not isinstance(res[0], Exception) else []
             incident_results = res[1] if not isinstance(res[1], Exception) else []
@@ -812,7 +829,7 @@ class CEOAgent:
                     step["result"] = f"Success ({len(incident_results)} tickets)" if incident_results else "Completed — no relevant tickets"
                 elif step["agent"] == "GraphAgent":
                     step["result"] = f"Success ({len(graph_results)} entities)" if graph_results else "Completed — no relevant graph context"
-            
+
             sources = list(set([r["metadata"].get("file_name", "Unknown File") for r in search_results]))
             yield update_steps()
 
@@ -877,7 +894,13 @@ class CEOAgent:
                 async for chunk in self.sop_agent.execute_stream(query, context_chunks, api_key, llm_provider, system_prompt, db=db, user_id=user.id):
                     full_answer += chunk
                     yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-                steps[-1]["result"] = "Success"
+
+                if not full_answer.strip():
+                    fallback = "[AI Copilot] The AI model returned an empty response. This is likely a temporary provider issue or a content filter. Please try again."
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': fallback})}\n\n"
+                    full_answer = fallback
+                else:
+                    steps[-1]["result"] = "Success"
                 yield update_steps()
             else:
                 steps.append({"agent": "CEOAgent", "action": f"Synthesizing response via {llm_provider}", "result": "Streaming..."})
@@ -886,7 +909,14 @@ class CEOAgent:
                 async for chunk in llm_client.stream(provider=llm_provider, api_key=api_key, system_prompt=system_prompt or "You are an Enterprise AI.", user_message=prompt, db=db, user_id=user.id):
                     full_answer += chunk
                     yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-                steps[-1]["result"] = "Success"
+
+                if not full_answer.strip():
+                    fallback = "[AI Copilot] The AI model returned an empty response. This is likely a temporary provider issue or a content filter. Please try again."
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': fallback})}\n\n"
+                    full_answer = fallback
+                    steps[-1]["result"] = "Error"
+                else:
+                    steps[-1]["result"] = "Success"
                 yield update_steps()
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"

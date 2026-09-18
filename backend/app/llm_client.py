@@ -15,7 +15,7 @@ logger = logging.getLogger("processpilot.llm")
 
 class LLMClient:
     """Unified LLM client with exponential backoff retry and cost tracking."""
-    
+
     # Approximate token costs per 1K tokens (USD)
     COST_PER_1K = {
         "gemini": {"input": 0.000075, "output": 0.0003},
@@ -23,7 +23,7 @@ class LLMClient:
         "groq": {"input": 0.00006, "output": 0.00006},
         "simulation": {"input": 0.0, "output": 0.0},
     }
-    
+
     # Approximate context window sizes (tokens)
     CONTEXT_LIMITS = {
         "gemini": 128000,
@@ -31,7 +31,7 @@ class LLMClient:
         "groq": 8000,
         "simulation": 32000,
     }
-    
+
     def __init__(self):
         self.total_usage = {
             "input_tokens": 0, "output_tokens": 0,
@@ -66,23 +66,23 @@ class LLMClient:
         import hashlib
         raw = f"{provider}::{system_prompt[:200]}::{user_message}"
         return hashlib.sha256(raw.encode()).hexdigest()
-    
+
     def estimate_tokens(self, text: str) -> int:
         """Rough token estimation: ~1.3 tokens per word."""
         if not text:
             return 0
         return int(len(text.split()) * 1.3)
-    
+
     def get_context_limit(self, provider: str) -> int:
         """Get the context window limit for a provider."""
         return self.CONTEXT_LIMITS.get(provider, 32000)
-    
+
     def is_context_safe(self, provider: str, system_prompt: str, user_message: str, threshold: float = 0.8) -> bool:
         """Check if the combined input is within safe context limits."""
         total_tokens = self.estimate_tokens(system_prompt + " " + user_message)
         limit = self.get_context_limit(provider)
         return total_tokens < limit * threshold
-    
+
     async def call(
         self,
         provider: str,
@@ -125,7 +125,7 @@ class LLMClient:
                 if len(self._response_cache) > 200:
                     oldest_key = next(iter(self._response_cache))
                     del self._response_cache[oldest_key]
-                
+
                 # Track usage
                 input_tokens = self.estimate_tokens(system_prompt + user_message)
                 output_tokens = self.estimate_tokens(result)
@@ -134,7 +134,7 @@ class LLMClient:
                 self.total_usage["output_tokens"] += output_tokens
                 self.total_usage["total_cost"] += cost
                 self.total_usage["calls"] += 1
-                
+
                 # Persist to database if db provided
                 if db and user_id:
                     try:
@@ -150,9 +150,9 @@ class LLMClient:
                         await db.commit()
                     except Exception as db_err:
                         logger.error(f"Failed to log LLM usage to DB: {db_err}")
-                
+
                 return result
-                
+
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
@@ -164,7 +164,7 @@ class LLMClient:
 
                 self._consecutive_failures += 1
                 self.total_usage["failures"] += 1
-                
+
                 if attempt < max_retries - 1:
                     wait_time = min(2 ** (attempt + 1), 16)
                     logger.warning(
@@ -174,15 +174,15 @@ class LLMClient:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.error(f"LLM call failed after {max_retries} attempts ({provider}): {e}")
-        
+
         # Circuit breaker: after 5 consecutive failures, fall back
         if self._consecutive_failures >= 5:
             self._circuit_open = True
             logger.warning("Circuit breaker ACTIVATED: falling back to simulation mode")
             return self._simulate(user_message)
-        
+
         return f"Error: LLM call failed after {max_retries} attempts. Last error: {last_error!s}"
-    
+
     async def stream(
         self,
         provider: str,
@@ -201,24 +201,27 @@ class LLMClient:
         if provider == "simulation" or not api_key:
             for c in self._simulate_stream(user_message): yield c
             return
-        
+
         # Circuit breaker check
         if self._circuit_open and self._consecutive_failures >= 5:
             logger.warning("Circuit breaker OPEN: using simulation fallback for streaming")
             for c in self._simulate_stream(user_message): yield c
             return
-        
+
         last_error = None
+        chunks_yielded = False
+
         for attempt in range(max_retries):
             try:
                 full_text = ""
                 async for chunk in self._dispatch_stream(provider, api_key, system_prompt, user_message):
+                    chunks_yielded = True
                     full_text += chunk
                     yield chunk
-                    
+
                 self._consecutive_failures = 0
                 self._circuit_open = False
-                
+
                 # Track usage
                 input_tokens = self.estimate_tokens(system_prompt + user_message)
                 output_tokens = self.estimate_tokens(full_text)
@@ -227,7 +230,7 @@ class LLMClient:
                 self.total_usage["output_tokens"] += output_tokens
                 self.total_usage["total_cost"] += cost
                 self.total_usage["calls"] += 1
-                
+
                 # Persist to database if db provided
                 if db and user_id:
                     try:
@@ -243,13 +246,18 @@ class LLMClient:
                         await db.commit()
                     except Exception as db_err:
                         logger.error(f"Failed to log LLM stream usage to DB: {db_err}")
-                
+
                 return
-                
+
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
-                
+
+                if chunks_yielded:
+                    # We already sent partial content to the client. Do NOT restart the stream.
+                    yield f"\n\n**[Connection Interrupted]** The AI provider ({provider}) encountered an error mid-stream. Please try again."
+                    return
+
                 # If authentication error, don't retry, and don't trip global circuit breaker
                 if "401" in err_str or "authentication" in err_str or "api_key" in err_str:
                     yield f"\n\n**Error:** Invalid {provider.capitalize()} API Key. Please verify your API key in Settings."
@@ -257,7 +265,7 @@ class LLMClient:
 
                 self._consecutive_failures += 1
                 self.total_usage["failures"] += 1
-                
+
                 if attempt < max_retries - 1:
                     wait_time = min(2 ** (attempt + 1), 16)
                     logger.warning(
@@ -267,7 +275,7 @@ class LLMClient:
                     await asyncio.sleep(wait_time)
                 else:
                     logger.error(f"LLM stream failed after {max_retries} attempts ({provider}): {e}")
-        
+
         # Circuit breaker
         if self._consecutive_failures >= 5:
             self._circuit_open = True
@@ -286,14 +294,14 @@ class LLMClient:
             return await self._call_groq(api_key, system_prompt, user_message)
         else:
             return self._simulate(user_message)
-    
+
     async def _call_gemini(self, api_key: str, system_prompt: str, user_message: str) -> str:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=system_prompt)
         response = await model.generate_content_async(user_message)
         return response.text
-    
+
     async def _call_openai(self, api_key: str, system_prompt: str, user_message: str) -> str:
         from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=api_key)
@@ -308,12 +316,12 @@ class LLMClient:
         if response.choices and len(response.choices) > 0:
             return response.choices[0].message.content
         return "Error: LLM returned an empty response."
-    
+
     async def _call_groq(self, api_key: str, system_prompt: str, user_message: str) -> str:
         from groq import AsyncGroq
         client = AsyncGroq(api_key=api_key)
         model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
-        
+
         try:
             response = await client.chat.completions.create(
                 model=model,
@@ -329,7 +337,7 @@ class LLMClient:
                 logger.warning(f"Groq model {model} not found/decommissioned. Fetching available models...")
                 models = await client.models.list()
                 available = [m.id for m in models.data if "whisper" not in m.id.lower()]
-                
+
                 last_err = e
                 response = None
                 for model_id in available:
@@ -347,16 +355,16 @@ class LLMClient:
                     except Exception as ex:
                         last_err = ex
                         continue
-                        
+
                 if not response:
                     raise last_err
             else:
                 raise e
-                
+
         if response.choices and len(response.choices) > 0:
             return response.choices[0].message.content
         return "Error: LLM returned an empty response."
-    
+
     async def _dispatch_stream(self, provider: str, api_key: str, system_prompt: str, user_message: str):
         if provider == "gemini":
             async for chunk in self._stream_gemini(api_key, system_prompt, user_message): yield chunk
@@ -396,7 +404,7 @@ class LLMClient:
         from groq import AsyncGroq
         client = AsyncGroq(api_key=api_key)
         model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
-        
+
         try:
             response = await client.chat.completions.create(
                 model=model,
@@ -413,7 +421,7 @@ class LLMClient:
                 logger.warning(f"Groq model {model} not found/decommissioned in stream. Fetching available models...")
                 models = await client.models.list()
                 available = [m.id for m in models.data if "whisper" not in m.id.lower()]
-                
+
                 last_err = e
                 response = None
                 for model_id in available:
@@ -432,16 +440,16 @@ class LLMClient:
                     except Exception as ex:
                         last_err = ex
                         continue
-                        
+
                 if not response:
                     raise last_err
             else:
                 raise e
-                
+
         async for chunk in response:
             if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
-    
+
     def _simulate(self, user_message: str) -> str:
         """Offline simulation mode."""
         return (
@@ -449,22 +457,22 @@ class LLMClient:
             f"to your query about: {user_message[:2000]}...\n\n"
             f"This is a simulated response. Configure an API key in Settings to enable live AI responses."
         )
-    
+
     def _simulate_stream(self, user_message: str):
         """Simulate a streaming response word by word (no sleep - safe for async context)."""
         text = self._simulate(user_message)
         words = text.split(" ")
         for i, word in enumerate(words):
             yield word + (" " if i < len(words) - 1 else "")
-    
+
     def _calculate_cost(self, provider: str, input_tokens: int, output_tokens: int) -> float:
         costs = self.COST_PER_1K.get(provider, self.COST_PER_1K["simulation"])
         return (input_tokens / 1000 * costs["input"]) + (output_tokens / 1000 * costs["output"])
-    
+
     def get_usage_stats(self) -> dict[str, Any]:
         """Return current usage statistics."""
         return dict(self.total_usage)
-    
+
     def reset_stats(self):
         """Reset usage statistics."""
         self.total_usage = {
