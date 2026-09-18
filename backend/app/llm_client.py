@@ -305,7 +305,9 @@ class LLMClient:
             ],
             max_tokens=2048
         )
-        return response.choices[0].message.content
+        if response.choices and len(response.choices) > 0:
+            return response.choices[0].message.content
+        return "Error: LLM returned an empty response."
     
     async def _call_groq(self, api_key: str, system_prompt: str, user_message: str) -> str:
         from groq import AsyncGroq
@@ -351,7 +353,9 @@ class LLMClient:
             else:
                 raise e
                 
-        return response.choices[0].message.content
+        if response.choices and len(response.choices) > 0:
+            return response.choices[0].message.content
+        return "Error: LLM returned an empty response."
     
     async def _dispatch_stream(self, provider: str, api_key: str, system_prompt: str, user_message: str):
         if provider == "gemini":
@@ -385,7 +389,7 @@ class LLMClient:
             stream=True
         )
         async for chunk in response:
-            if chunk.choices[0].delta.content:
+            if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
     async def _stream_groq(self, api_key: str, system_prompt: str, user_message: str):
