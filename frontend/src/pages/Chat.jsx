@@ -122,9 +122,14 @@ export default function Chat() {
       showSteps: false,
     }]);
 
-    // Abort controller for 90s timeout
+    // Abort controller for inactivity timeout (90s)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000);
+    let timeoutId = setTimeout(() => controller.abort(), 90000);
+
+    const resetTimeout = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => controller.abort(), 90000);
+    };
 
     try {
       const token = localStorage.getItem('token');
@@ -148,6 +153,8 @@ export default function Chat() {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
+        
+        resetTimeout();
         
         // Prepend any leftover from previous chunk to handle TCP boundary splits
         const chunkStr = leftover + decoder.decode(value, { stream: true });
