@@ -414,6 +414,9 @@ class CEOAgent:
             elif os.getenv("GEMINI_API_KEY"):
                 embedding_provider = "gemini"
                 embedding_api_key = os.getenv("GEMINI_API_KEY")
+            elif os.getenv("INFRA_EMBEDDING_API_KEY"):
+                embedding_provider = os.getenv("INFRA_EMBEDDING_PROVIDER", "gemini").lower()
+                embedding_api_key = os.getenv("INFRA_EMBEDDING_API_KEY")
 
         # Step 1: Memory (Fast retrieval of previous user preferences/context)
         try:
@@ -781,6 +784,9 @@ class CEOAgent:
                 elif os.getenv("GEMINI_API_KEY"):
                     embedding_provider = "gemini"
                     embedding_api_key = os.getenv("GEMINI_API_KEY")
+                elif os.getenv("INFRA_EMBEDDING_API_KEY"):
+                    embedding_provider = os.getenv("INFRA_EMBEDDING_PROVIDER", "gemini").lower()
+                    embedding_api_key = os.getenv("INFRA_EMBEDDING_API_KEY")
 
             steps = []
             sources = []
@@ -952,7 +958,7 @@ class CEOAgent:
 
         except Exception as e:
             logger.error(f"[CEOAgent] process_query_stream crashed: {e}", exc_info=True)
-            err_msg = json.dumps({"type": "chunk", "content": f"[AI Copilot Error] {e!s}. Please try again."})
+            err_msg = json.dumps({"type": "error", "message": f"[AI Copilot Error] {e!s}. Please try again."})
             yield f"data: {err_msg}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 

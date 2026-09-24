@@ -38,15 +38,6 @@ async def lifespan(app: FastAPI):
     """Async lifespan context — replaces deprecated @app.on_event."""
     # ── Startup ────────────────────────────────────────────────────────────
     logger.info("[Startup] Initializing database schema...")
-    
-    logger.info("[Startup] Preloading SentenceTransformer model...")
-    try:
-        from .vectorstore import get_local_embedding
-        await asyncio.to_thread(get_local_embedding, "preload")
-        logger.info("[Startup] SentenceTransformer preloaded successfully.")
-    except Exception as e:
-        logger.critical(f"[Startup] FATAL: Failed to preload SentenceTransformer: {e}")
-        raise e
 
     async with engine.begin() as conn:
         is_postgres = "postgresql" in settings.DATABASE_URL or "postgres" in settings.DATABASE_URL

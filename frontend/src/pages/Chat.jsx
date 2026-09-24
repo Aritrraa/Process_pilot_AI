@@ -182,6 +182,13 @@ export default function Chat() {
                   newMsgs[newMsgs.length - 1].content += data.content;
                   return newMsgs;
                 });
+              } else if (data.type === 'error') {
+                setMessages(prev => {
+                  const newMsgs = [...prev];
+                  newMsgs[newMsgs.length - 1].content = `**Backend Error:** ${data.message || 'Unknown error occurred.'}`;
+                  newMsgs[newMsgs.length - 1].isError = true;
+                  return newMsgs;
+                });
               } else if (data.type === 'done') {
                 // Done
               }
