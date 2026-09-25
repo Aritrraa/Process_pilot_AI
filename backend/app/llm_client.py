@@ -317,6 +317,21 @@ class LLMClient:
             return response.choices[0].message.content
         return "Error: LLM returned an empty response."
 
+    def _get_groq_text_fallback_models(self, models_data) -> list:
+        """Select fallback models from an explicit allowlist of known text-generation models."""
+        allowlist = [
+            "llama-3.1-8b-instant",
+            "llama-3.3-70b-versatile",
+            "llama3-8b-8192",
+            "llama3-70b-8192",
+            "mixtral-8x7b-32768",
+            "gemma2-9b-it",
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b"
+        ]
+        available_ids = [m.id for m in models_data]
+        return [m for m in allowlist if m in available_ids]
+
     async def _call_groq(self, api_key: str, system_prompt: str, user_message: str) -> str:
         from groq import AsyncGroq
         client = AsyncGroq(api_key=api_key)
@@ -336,7 +351,9 @@ class LLMClient:
             if "does not exist" in err_str or "model_not_found" in err_str or "decommissioned" in err_str:
                 logger.warning(f"Groq model {model} not found/decommissioned. Fetching available models...")
                 models = await client.models.list()
-                available = [m.id for m in models.data if "whisper" not in m.id.lower()]
+                available = self._get_groq_text_fallback_models(models.data)
+                if not available:
+                    raise RuntimeError("No supported Groq text-generation fallback model is available.")
 
                 last_err = e
                 response = None
@@ -422,7 +439,9 @@ class LLMClient:
             if "does not exist" in err_str or "model_not_found" in err_str or "decommissioned" in err_str:
                 logger.warning(f"Groq model {model} not found/decommissioned in stream. Fetching available models...")
                 models = await client.models.list()
-                available = [m.id for m in models.data if "whisper" not in m.id.lower()]
+                available = self._get_groq_text_fallback_models(models.data)
+                if not available:
+                    raise RuntimeError("No supported Groq text-generation fallback model is available.")
 
                 last_err = e
                 response = None
