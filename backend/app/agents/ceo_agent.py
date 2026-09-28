@@ -832,25 +832,39 @@ class CEOAgent:
 
             dept_id = None if user.role == "Admin" else user.department_id
 
-            steps.append({"agent": "SearchAgent", "action": "Querying Vector DB", "result": "Running..."})
-            steps.append({"agent": "IncidentAgent", "action": "Semantic ticket matching", "result": "Running..."})
-            steps.append({"agent": "GraphAgent", "action": "Querying Knowledge Graph", "result": "Running..."})
-            yield update_steps()
+            is_trivial = intent == "general" and len(query.split()) <= 5 and query.lower().strip() in {"hi", "hello", "hey", "thanks", "thank you", "ok", "okay", "bye", "good morning", "good afternoon", "good evening", "who are you"}
 
-            search_task = asyncio.to_thread(self.search_agent.execute, query, dept_id, embedding_api_key, embedding_provider)
-            incident_task = self.incident_agent.execute(query, db)
-            graph_task = self.graph_agent.execute(query, db)
+            search_results = []
+            incident_results = []
+            graph_results = []
+            res = [[], [], []]
 
-            res = await asyncio.gather(search_task, incident_task, graph_task, return_exceptions=True)
-            search_results = res[0] if not isinstance(res[0], Exception) else []
-            incident_results = res[1] if not isinstance(res[1], Exception) else []
-            graph_results = res[2] if not isinstance(res[2], Exception) else []
+            if not is_trivial:
+                steps.append({"agent": "SearchAgent", "action": "Querying Vector DB", "result": "Running..."})
+                steps.append({"agent": "IncidentAgent", "action": "Semantic ticket matching", "result": "Running..."})
+                steps.append({"agent": "GraphAgent", "action": "Querying Knowledge Graph", "result": "Running..."})
+                yield update_steps()
+
+                search_task = asyncio.to_thread(self.search_agent.execute, query, dept_id, embedding_api_key, embedding_provider)
+                incident_task = self.incident_agent.execute(query, db)
+                graph_task = self.graph_agent.execute(query, db)
+
+                res = await asyncio.gather(search_task, incident_task, graph_task, return_exceptions=True)
+                search_results = res[0] if not isinstance(res[0], Exception) else []
+                incident_results = res[1] if not isinstance(res[1], Exception) else []
+                graph_results = res[2] if not isinstance(res[2], Exception) else []
 
             for step in steps:
                 if step["agent"] == "SearchAgent":
                     if isinstance(res[0], Exception):
+                        logger.error(f"[SearchAgent] Vector DB search failed: {res[0]}", exc_info=res[0])
+                        # Provide safe diagnostic in step — strip any API key/credential info
+                        safe_msg = str(res[0])
+                        # Remove anything that looks like an API key (long alphanumeric strings)
+                        import re
+                        safe_msg = re.sub(r'[A-Za-z0-9_\-]{20,}', '[REDACTED]', safe_msg)
                         step["action"] = "Failed to query vector database"
-                        step["result"] = "Error"
+                        step["result"] = f"Error: {type(res[0]).__name__}: {safe_msg[:200]}"
                     else:
                         step["result"] = f"Success ({len(search_results)} chunks)"
                 elif step["agent"] == "IncidentAgent":
@@ -875,42 +889,64 @@ class CEOAgent:
                     steps[-1]["result"] = "Failed"
                 yield update_steps()
 
-            try:
-                from ..analytics import get_system_analytics
-                analytics_data = await get_system_analytics(db, user)
-                analytics_summary = [
-                    "System & Team Analytics Overview:",
-                    f"- Documentation Health Score: {analytics_data.get('documentation_health', 0)}%",
-                    f"- Task Status Distribution: {analytics_data.get('task_status', {})}",
-                ]
-                analytics_info = "\n".join(analytics_summary)
-            except Exception:
-                analytics_info = "Analytics unavailable."
+            # --- TRIVIAL QUERY SHORT-CIRCUIT ---
+            # For trivial greetings, skip ALL expensive context collection and use minimal prompt.
+            if is_trivial:
+                prompt = f"You are ProcessPilot AI, an Enterprise Operations Copilot.\nUser: {user.email} (Role: {user.role})\n\nQuery: {query}"
+                logger.info(f"[CEOAgent] Trivial query detected. Prompt size: {len(prompt)} chars")
+            else:
+                # --- FULL CONTEXT COLLECTION (non-trivial queries only) ---
+                try:
+                    from ..analytics import get_system_analytics
+                    analytics_data = await get_system_analytics(db, user)
+                    analytics_summary = [
+                        "System & Team Analytics Overview:",
+                        f"- Documentation Health Score: {analytics_data.get('documentation_health', 0)}%",
+                        f"- Task Status Distribution: {analytics_data.get('task_status', {})}",
+                    ]
+                    analytics_info = "\n".join(analytics_summary)
+                except Exception:
+                    analytics_info = "Analytics unavailable."
 
-            try:
-                directory_info = await self._get_org_directory(db, user)
-            except Exception:
-                directory_info = ""
+                try:
+                    directory_info = await self._get_org_directory(db, user)
+                except Exception:
+                    directory_info = ""
 
-            r_t = await db.execute(select(Task).filter(Task.assigned_to == user.id))
-            user_tasks = r_t.scalars().all()
-            user_tasks_info = "\n".join([f"- {t.title} [{t.status}]" for t in user_tasks] if user_tasks else ["No tasks"])
+                r_t = await db.execute(select(Task).filter(Task.assigned_to == user.id))
+                user_tasks = r_t.scalars().all()
+                user_tasks_info = "\n".join([f"- {t.title} [{t.status}]" for t in user_tasks] if user_tasks else ["No tasks"])
 
-            conversation_history = await self._build_conversation_history(db, user)
+                conversation_history = await self._build_conversation_history(db, user)
 
-            prompt = (
-                "You are ProcessPilot AI, an Enterprise Operations Copilot.\n"
-                "Synthesize an answer for the user query using the retrieved knowledge, incident tickets, past memories, organizational directory, system/team analytics, and the user's specific assigned task list.\n"
-                f"User Details: {user.email} (Role: {user.role})\n"
-                f"{directory_info}\n"
-                f"Assigned Tasks:\n{user_tasks_info}\n"
-                f"Analytics:\n{analytics_info}\n"
-                f"Memories:\n{user_memories}\n"
-                f"Recent Conversation History:\n{conversation_history}\n"
-                f"Context:\n" + "\n---\n".join(context_chunks) + "\n"
-                f"Incidents: {incident_results}\n"
-                f"Query: {query}\n"
-            )
+                # Bound context strings as safety net
+                def bound_text(text, max_len=1500):
+                    text_str = str(text)
+                    return text_str[:max_len] + ("...\n[Truncated]" if len(text_str) > max_len else "")
+
+                directory_info = bound_text(directory_info, 1500)
+                analytics_info = bound_text(analytics_info, 1000)
+                user_tasks_info = bound_text(user_tasks_info, 1000)
+                user_memories = bound_text(user_memories, 1000)
+                conversation_history = bound_text(conversation_history, 1500)
+                incident_text = bound_text(str(incident_results), 1500)
+                context_chunks = [bound_text(c, 1500) for c in context_chunks[:3]]
+
+                prompt = (
+                    "You are ProcessPilot AI, an Enterprise Operations Copilot.\n"
+                    "Synthesize an answer for the user query using the retrieved knowledge, incident tickets, past memories, organizational directory, system/team analytics, and the user's specific assigned task list.\n"
+                    f"User Details: {user.email} (Role: {user.role})\n"
+                    f"{directory_info}\n"
+                    f"Assigned Tasks:\n{user_tasks_info}\n"
+                    f"Analytics:\n{analytics_info}\n"
+                    f"Memories:\n{user_memories}\n"
+                    f"Recent Conversation History:\n{conversation_history}\n"
+                    f"Context:\n" + "\n---\n".join(context_chunks) + "\n"
+                    f"Incidents: {incident_text}\n"
+                    f"Query: {query}\n"
+                )
+
+                logger.info(f"[CEOAgent] Full query. Prompt size: {len(prompt)} chars, ~{len(prompt.split()) * 1.3:.0f} est. tokens")
 
             if system_prompt:
                 prompt = f"System Instruction: {system_prompt}\n\n{prompt}"

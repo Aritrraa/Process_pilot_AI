@@ -73,7 +73,7 @@ class EmbeddingProvider:
                     return response['embedding']
                 return _call_gemini()
             except Exception as e:
-                logger.warning(f"Gemini embedding failed after retries, using local mock fallback: {e}")
+                logger.error(f"[EmbeddingProvider] Gemini embedding failed after retries. Real exception: {e!s}", exc_info=e)
                 return self._local_mock_embedding(text)
         else:
             return self._local_mock_embedding(text)

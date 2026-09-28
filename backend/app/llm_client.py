@@ -37,10 +37,26 @@ class LLMClient:
             "input_tokens": 0, "output_tokens": 0,
             "total_cost": 0.0, "calls": 0, "failures": 0
         }
-        self._consecutive_failures = 0
-        self._circuit_open = False
+        # Per-provider circuit breaker state
+        self._provider_failures: dict[str, int] = {}
+        self._provider_circuit_open: dict[str, bool] = {}
         # In-memory exact-match response cache {(provider, prompt_hash): response}
         self._response_cache: dict = {}
+
+    def _get_failures(self, provider: str) -> int:
+        return self._provider_failures.get(provider, 0)
+
+    def _set_failures(self, provider: str, count: int):
+        self._provider_failures[provider] = count
+        if count >= 5:
+            self._provider_circuit_open[provider] = True
+
+    def _reset_provider(self, provider: str):
+        self._provider_failures[provider] = 0
+        self._provider_circuit_open[provider] = False
+
+    def _is_circuit_open(self, provider: str) -> bool:
+        return self._provider_circuit_open.get(provider, False) and self._get_failures(provider) >= 5
 
     # ===== SEMANTIC ROUTER =====
     # Simple queries (short length, greetings) â†’ cheap fast model
@@ -107,17 +123,16 @@ class LLMClient:
             logger.info("[Cache] HIT â€” returning cached LLM response")
             return self._response_cache[cache_key]
 
-        # Circuit breaker check
-        if self._circuit_open and self._consecutive_failures >= 5:
-            logger.warning("Circuit breaker OPEN: using simulation fallback")
+        # Circuit breaker check (per-provider)
+        if self._is_circuit_open(provider):
+            logger.warning(f"Circuit breaker OPEN for {provider}: using simulation fallback")
             return self._simulate(user_message)
 
         last_error = None
         for attempt in range(max_retries):
             try:
                 result = await self._dispatch(provider, api_key, system_prompt, user_message)
-                self._consecutive_failures = 0
-                self._circuit_open = False
+                self._reset_provider(provider)
 
                 # Store in cache
                 self._response_cache[cache_key] = result
@@ -161,8 +176,26 @@ class LLMClient:
                 if "401" in err_str or "404" in err_str or "authentication" in err_str or "api_key" in err_str or "does not exist" in err_str:
                     logger.error(f"LLM call permanent error ({provider}): {e}")
                     return f"Error: {e!s}"
+                
+                if "413" in err_str or "too large" in err_str or (("rate_limit_exceeded" in err_str or "resource_exhausted" in err_str) and "tokens" in err_str):
+                    logger.error(f"LLM call too large ({provider}): {e}")
+                    return "Error: Request too large for the selected model. Please reduce the context or query size."
 
-                self._consecutive_failures += 1
+                # Don't retry on hard quota exhaustion — provider won't accept more requests
+                if any(phrase in err_str for phrase in [
+                    "quota", "resource_exhausted", "individual quota",
+                    "upgrade your subscription", "resets in",
+                    "organization quota", "billing",
+                ]):
+                    logger.error(f"LLM provider quota exhausted ({provider}): {e}")
+                    return f"Error: {provider.capitalize()} API quota has been exhausted. Please use another provider or wait for your quota to reset."
+
+                # Don't retry on permission / model terms errors
+                if "403" in err_str or "permission" in err_str or "model_terms_required" in err_str:
+                    logger.error(f"LLM call permission/terms error ({provider}): {e}")
+                    return f"Error: {e!s}"
+
+                self._set_failures(provider, self._get_failures(provider) + 1)
                 self.total_usage["failures"] += 1
 
                 if attempt < max_retries - 1:
@@ -175,10 +208,10 @@ class LLMClient:
                 else:
                     logger.error(f"LLM call failed after {max_retries} attempts ({provider}): {e}")
 
-        # Circuit breaker: after 5 consecutive failures, fall back
-        if self._consecutive_failures >= 5:
-            self._circuit_open = True
-            logger.warning("Circuit breaker ACTIVATED: falling back to simulation mode")
+        # Circuit breaker: after 5 consecutive failures for this provider, fall back
+        if self._get_failures(provider) >= 5:
+            self._provider_circuit_open[provider] = True
+            logger.warning(f"Circuit breaker ACTIVATED for {provider}: falling back to simulation mode")
             return self._simulate(user_message)
 
         return f"Error: LLM call failed after {max_retries} attempts. Last error: {last_error!s}"
@@ -202,9 +235,9 @@ class LLMClient:
             for c in self._simulate_stream(user_message): yield c
             return
 
-        # Circuit breaker check
-        if self._circuit_open and self._consecutive_failures >= 5:
-            logger.warning("Circuit breaker OPEN: using simulation fallback for streaming")
+        # Circuit breaker check (per-provider)
+        if self._is_circuit_open(provider):
+            logger.warning(f"Circuit breaker OPEN for {provider}: using simulation fallback for streaming")
             for c in self._simulate_stream(user_message): yield c
             return
 
@@ -219,8 +252,7 @@ class LLMClient:
                     full_text += chunk
                     yield chunk
 
-                self._consecutive_failures = 0
-                self._circuit_open = False
+                self._reset_provider(provider)
 
                 # Track usage
                 input_tokens = self.estimate_tokens(system_prompt + user_message)
@@ -262,8 +294,26 @@ class LLMClient:
                 if "401" in err_str or "authentication" in err_str or "api_key" in err_str:
                     yield f"\n\n**Error:** Invalid {provider.capitalize()} API Key. Please verify your API key in Settings."
                     return
+                
+                if "413" in err_str or "too large" in err_str or (("rate_limit_exceeded" in err_str or "resource_exhausted" in err_str) and "tokens" in err_str):
+                    yield "\n\n**Error:** Request too large for the selected model. Please reduce the context or query size."
+                    return
 
-                self._consecutive_failures += 1
+                # Don't retry on hard quota exhaustion
+                if any(phrase in err_str for phrase in [
+                    "quota", "resource_exhausted", "individual quota",
+                    "upgrade your subscription", "resets in",
+                    "organization quota", "billing",
+                ]):
+                    yield f"\n\n**Error:** {provider.capitalize()} API quota has been exhausted. Please use another provider or wait for your quota to reset."
+                    return
+
+                # Don't retry on permission / model terms errors
+                if "403" in err_str or "permission" in err_str or "model_terms_required" in err_str:
+                    yield f"\n\n**Error:** {provider.capitalize()} access denied: {e!s}"
+                    return
+
+                self._set_failures(provider, self._get_failures(provider) + 1)
                 self.total_usage["failures"] += 1
 
                 if attempt < max_retries - 1:
@@ -276,10 +326,10 @@ class LLMClient:
                 else:
                     logger.error(f"LLM stream failed after {max_retries} attempts ({provider}): {e}")
 
-        # Circuit breaker
-        if self._consecutive_failures >= 5:
-            self._circuit_open = True
-            logger.warning("Circuit breaker ACTIVATED: falling back to simulation mode")
+        # Circuit breaker (per-provider)
+        if self._get_failures(provider) >= 5:
+            self._provider_circuit_open[provider] = True
+            logger.warning(f"Circuit breaker ACTIVATED for {provider}: falling back to simulation mode")
             for c in self._simulate_stream(user_message): yield c
         else:
             yield f"\n\n**System Error:** LLM provider failed after {max_retries} attempts. Last error: {last_error}"
@@ -298,7 +348,11 @@ class LLMClient:
     async def _call_gemini(self, api_key: str, system_prompt: str, user_message: str) -> str:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=system_prompt)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        if system_prompt:
+            user_message = f"System Instruction: {system_prompt}\n\n{user_message}"
+            
         response = await model.generate_content_async(user_message)
         return response.text
 
@@ -334,7 +388,7 @@ class LLMClient:
 
     async def _call_groq(self, api_key: str, system_prompt: str, user_message: str) -> str:
         from groq import AsyncGroq
-        client = AsyncGroq(api_key=api_key)
+        client = AsyncGroq(api_key=api_key, max_retries=0)
         model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
 
         try:
@@ -395,7 +449,11 @@ class LLMClient:
     async def _stream_gemini(self, api_key: str, system_prompt: str, user_message: str):
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash", system_instruction=system_prompt)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        if system_prompt:
+            user_message = f"System Instruction: {system_prompt}\n\n{user_message}"
+            
         response = await model.generate_content_async(user_message, stream=True)
         async for chunk in response:
             if chunk.text:
@@ -421,7 +479,7 @@ class LLMClient:
 
     async def _stream_groq(self, api_key: str, system_prompt: str, user_message: str):
         from groq import AsyncGroq
-        client = AsyncGroq(api_key=api_key)
+        client = AsyncGroq(api_key=api_key, max_retries=0)
         model = self._route_model(user_message)  # Semantic Router picks cheap vs powerful
 
         try:
