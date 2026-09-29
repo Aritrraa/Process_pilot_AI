@@ -327,12 +327,12 @@ class TestEmbeddingAndRAG:
         finally:
             settings.ENVIRONMENT = original_env
 
-    def test_gemini_embedding_uses_text_embedding_004(self):
-        """Gemini embedding must use text-embedding-004, not a chat model."""
+    def test_gemini_embedding_uses_embedding_001(self):
+        """Gemini embedding must use models/embedding-001, which is supported by v0.4.1."""
         import inspect
         from app.vectorstore import EmbeddingProvider
         source = inspect.getsource(EmbeddingProvider.get_embedding)
-        assert "text-embedding-004" in source
+        assert "models/embedding-001" in source
         assert "gemini-1.5-flash" not in source
 
     def test_openai_embedding_uses_text_embedding_3_small(self):
@@ -396,11 +396,11 @@ class TestGeminiSDKCompat:
         assert "system_instruction" not in stream_source
 
     def test_gemini_model_name_valid(self):
-        """Code must use gemini-1.5-flash (valid model)."""
+        """Code must use gemini-pro which is fully supported by SDK 0.4.1."""
         import inspect
         from app.llm_client import LLMClient
         source = inspect.getsource(LLMClient._call_gemini)
-        assert "gemini-1.5-flash" in source
+        assert "gemini-pro" in source
 
     def test_generate_content_async_supports_stream(self):
         """Installed SDK must support stream= parameter."""
@@ -620,7 +620,7 @@ class TestQuotaExhaustion:
 
 
 class TestDeterministicErrorFastFail:
-    """Permission, model_terms, 403 must not retry."""
+    """Permission, model_terms, 403, 404 must not retry."""
 
     @pytest.mark.asyncio
     async def test_403_no_retry(self):
@@ -651,6 +651,27 @@ class TestDeterministicErrorFastFail:
         client._dispatch = counting_dispatch
         await client.call("groq", "real-key", "sys", "hi")
         assert call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_404_model_not_found_stream_no_retry(self):
+        """404 'model not found' in stream() must fast-fail."""
+        client = LLMClient()
+        call_count = 0
+
+        async def counting_dispatch(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise Exception("404 models/gemini-1.5-flash is not found")
+            yield
+
+        client._dispatch_stream = counting_dispatch
+        chunks = []
+        async for chunk in client.stream("gemini", "real-key", "sys", "hi"):
+            chunks.append(chunk)
+        
+        assert call_count == 1
+        result = "".join(chunks)
+        assert "configuration error" in result.lower() or "not found" in result.lower()
 
     @pytest.mark.asyncio
     async def test_transient_500_still_retries(self):

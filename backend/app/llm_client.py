@@ -290,9 +290,9 @@ class LLMClient:
                     yield f"\n\n**[Connection Interrupted]** The AI provider ({provider}) encountered an error mid-stream. Please try again."
                     return
 
-                # If authentication error, don't retry, and don't trip global circuit breaker
-                if "401" in err_str or "authentication" in err_str or "api_key" in err_str:
-                    yield f"\n\n**Error:** Invalid {provider.capitalize()} API Key. Please verify your API key in Settings."
+                # If authentication or model error, don't retry, and don't trip global circuit breaker
+                if "401" in err_str or "authentication" in err_str or "api_key" in err_str or "404" in err_str or "does not exist" in err_str or "not found" in err_str:
+                    yield f"\n\n**Error:** {provider.capitalize()} API configuration error (e.g. invalid key or model not found). Details: {e!s}"
                     return
                 
                 if "413" in err_str or "too large" in err_str or (("rate_limit_exceeded" in err_str or "resource_exhausted" in err_str) and "tokens" in err_str):
@@ -348,7 +348,9 @@ class LLMClient:
     async def _call_gemini(self, api_key: str, system_prompt: str, user_message: str) -> str:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        # Use gemini-pro which is fully supported by SDK 0.4.1
+        model = genai.GenerativeModel("gemini-pro")
         
         if system_prompt:
             user_message = f"System Instruction: {system_prompt}\n\n{user_message}"
@@ -449,7 +451,9 @@ class LLMClient:
     async def _stream_gemini(self, api_key: str, system_prompt: str, user_message: str):
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        # Use gemini-pro which is fully supported by SDK 0.4.1
+        model = genai.GenerativeModel("gemini-pro")
         
         if system_prompt:
             user_message = f"System Instruction: {system_prompt}\n\n{user_message}"

@@ -963,6 +963,9 @@ class CEOAgent:
                     fallback = "[AI Copilot] The AI model returned an empty response. This is likely a temporary provider issue or a content filter. Please try again."
                     yield f"data: {json.dumps({'type': 'chunk', 'content': fallback})}\n\n"
                     full_answer = fallback
+                    steps[-1]["result"] = "Failed"
+                elif "**Error:**" in full_answer or "**System Error:**" in full_answer or "**[Connection Interrupted]**" in full_answer:
+                    steps[-1]["result"] = "Failed"
                 else:
                     steps[-1]["result"] = "Success"
                 yield update_steps()
@@ -978,6 +981,8 @@ class CEOAgent:
                     fallback = "[AI Copilot] The AI model returned an empty response. This is likely a temporary provider issue or a content filter. Please try again."
                     yield f"data: {json.dumps({'type': 'chunk', 'content': fallback})}\n\n"
                     full_answer = fallback
+                    steps[-1]["result"] = "Error"
+                elif "**Error:**" in full_answer or "**System Error:**" in full_answer or "**[Connection Interrupted]**" in full_answer:
                     steps[-1]["result"] = "Error"
                 else:
                     steps[-1]["result"] = "Success"

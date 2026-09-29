@@ -66,7 +66,7 @@ class EmbeddingProvider:
                 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
                 def _call_gemini():
                     response = genai.embed_content(
-                        model="models/text-embedding-004",
+                        model="models/embedding-001",
                         content=text,
                         task_type="retrieval_document"
                     )
@@ -74,6 +74,9 @@ class EmbeddingProvider:
                 return _call_gemini()
             except Exception as e:
                 logger.error(f"[EmbeddingProvider] Gemini embedding failed after retries. Real exception: {e!s}", exc_info=e)
+                if settings.ENVIRONMENT == "production":
+                    # Propagate real error rather than silently failing to mock embeddings
+                    raise RuntimeError(f"Gemini API Error: {e!s}") from e
                 return self._local_mock_embedding(text)
         else:
             return self._local_mock_embedding(text)
