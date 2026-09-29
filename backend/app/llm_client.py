@@ -349,14 +349,33 @@ class LLMClient:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         
-        # Use gemini-1.5-flash supported by modern SDK
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
         if system_prompt:
             user_message = f"System Instruction: {system_prompt}\n\n{user_message}"
             
-        response = await model.generate_content_async(user_message)
-        return response.text
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = await model.generate_content_async(user_message)
+            return response.text
+        except Exception as e:
+            err_str = str(e).lower()
+            if "404" in err_str or "not found" in err_str or "not supported" in err_str:
+                logger.warning(f"gemini-1.5-flash not found or unsupported. Fetching available models...")
+                available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                logger.info(f"Available Gemini models: {available}")
+                
+                fallback = next((m for m in available if "gemini-1.5-flash" in m or "gemini-pro" in m), None)
+                if not fallback and available:
+                    fallback = available[0]
+                    
+                if not fallback:
+                    raise RuntimeError("No supported Gemini fallback model is available.")
+                
+                logger.info(f"Falling back to Gemini model: {fallback}")
+                model = genai.GenerativeModel(fallback.replace("models/", ""))
+                response = await model.generate_content_async(user_message)
+                return response.text
+            else:
+                raise e
 
     async def _call_openai(self, api_key: str, system_prompt: str, user_message: str) -> str:
         from openai import AsyncOpenAI
@@ -452,16 +471,36 @@ class LLMClient:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         
-        # Use gemini-1.5-flash supported by modern SDK
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
         if system_prompt:
             user_message = f"System Instruction: {system_prompt}\n\n{user_message}"
             
-        response = await model.generate_content_async(user_message, stream=True)
-        async for chunk in response:
-            if chunk.text:
-                yield chunk.text
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = await model.generate_content_async(user_message, stream=True)
+            async for chunk in response:
+                if chunk.text:
+                    yield chunk.text
+        except Exception as e:
+            err_str = str(e).lower()
+            if "404" in err_str or "not found" in err_str or "not supported" in err_str:
+                logger.warning(f"gemini-1.5-flash not found or unsupported. Fetching available models...")
+                available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                
+                fallback = next((m for m in available if "gemini-1.5-flash" in m or "gemini-pro" in m), None)
+                if not fallback and available:
+                    fallback = available[0]
+                    
+                if not fallback:
+                    raise RuntimeError("No supported Gemini fallback model is available.")
+                
+                logger.info(f"Falling back to Gemini stream model: {fallback}")
+                model = genai.GenerativeModel(fallback.replace("models/", ""))
+                response = await model.generate_content_async(user_message, stream=True)
+                async for chunk in response:
+                    if chunk.text:
+                        yield chunk.text
+            else:
+                raise e
 
     async def _stream_openai(self, api_key: str, system_prompt: str, user_message: str):
         from openai import AsyncOpenAI

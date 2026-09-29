@@ -63,15 +63,28 @@ class EmbeddingProvider:
 
         elif self.llm_provider == "gemini":
             try:
-                @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-                def _call_gemini():
+                def _call_gemini(model_name="models/text-embedding-004"):
                     response = genai.embed_content(
-                        model="models/text-embedding-004",
+                        model=model_name,
                         content=text,
                         task_type="retrieval_document"
                     )
                     return response['embedding']
-                return _call_gemini()
+
+                try:
+                    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=10))
+                    def _try_primary():
+                        return _call_gemini("models/text-embedding-004")
+                    return _try_primary()
+                except Exception as e_primary:
+                    if "404" in str(e_primary) or "NotFound" in str(e_primary):
+                        logger.warning("text-embedding-004 not found, falling back to embedding-001")
+                        @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=10))
+                        def _try_fallback():
+                            return _call_gemini("models/embedding-001")
+                        return _try_fallback()
+                    else:
+                        raise e_primary
             except Exception as e:
                 logger.error(f"[EmbeddingProvider] Gemini embedding failed after retries. Real exception: {e!s}", exc_info=e)
                 if settings.ENVIRONMENT == "production":
