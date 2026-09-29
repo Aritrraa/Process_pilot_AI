@@ -64,11 +64,10 @@ class EmbeddingProvider:
         elif self.llm_provider == "gemini":
             try:
                 def _call_gemini(model_name="models/text-embedding-004"):
-                    response = genai.embed_content(
-                        model=model_name,
-                        content=text,
-                        task_type="retrieval_document"
-                    )
+                    kwargs = {"model": model_name, "content": text}
+                    if "embedding-001" in model_name:
+                        kwargs["task_type"] = "retrieval_document"
+                    response = genai.embed_content(**kwargs)
                     return response['embedding']
 
                 try:
@@ -78,10 +77,21 @@ class EmbeddingProvider:
                     return _try_primary()
                 except Exception as e_primary:
                     if "404" in str(e_primary) or "NotFound" in str(e_primary):
-                        logger.warning("text-embedding-004 not found, falling back to embedding-001")
+                        logger.warning("text-embedding-004 not found. Fetching available embedding models...")
+                        available = [m.name for m in genai.list_models() if 'embedContent' in m.supported_generation_methods]
+                        logger.info(f"Available Gemini embedding models: {available}")
+                        
+                        fallback = next((m for m in available if "text-embedding" in m or "embedding-001" in m), None)
+                        if not fallback and available:
+                            fallback = available[0]
+                            
+                        if not fallback:
+                            raise RuntimeError("No supported Gemini embedding model found on this API key.")
+                            
+                        logger.info(f"Falling back to Gemini embedding model: {fallback}")
                         @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=10))
                         def _try_fallback():
-                            return _call_gemini("models/embedding-001")
+                            return _call_gemini(fallback)
                         return _try_fallback()
                     else:
                         raise e_primary
