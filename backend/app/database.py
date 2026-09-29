@@ -16,6 +16,7 @@ connect_args = {"check_same_thread": False} if is_sqlite else {}
 # Fix for Supabase Transaction Pooler (port 6543) crashing asyncpg
 if not is_sqlite:
     connect_args["prepared_statement_cache_size"] = 0
+    connect_args["statement_cache_size"] = 0
 
 # For SQLite async we would need aiosqlite, but assuming production is Postgres
 if is_sqlite:
