@@ -130,6 +130,7 @@ def _ingest_document_background(
             document = db.query(Document).filter(Document.id == document_id).first()
             if document:
                 document.ingestion_status = "failed"
+                document.file_path = str(e)[:250]
                 db.commit()
         except Exception:
             pass
