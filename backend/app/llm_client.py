@@ -349,8 +349,8 @@ class LLMClient:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         
-        # Use gemini-pro which is fully supported by SDK 0.4.1
-        model = genai.GenerativeModel("gemini-pro")
+        # Use gemini-1.5-flash supported by modern SDK
+        model = genai.GenerativeModel("gemini-1.5-flash")
         
         if system_prompt:
             user_message = f"System Instruction: {system_prompt}\n\n{user_message}"
@@ -452,8 +452,8 @@ class LLMClient:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         
-        # Use gemini-pro which is fully supported by SDK 0.4.1
-        model = genai.GenerativeModel("gemini-pro")
+        # Use gemini-1.5-flash supported by modern SDK
+        model = genai.GenerativeModel("gemini-1.5-flash")
         
         if system_prompt:
             user_message = f"System Instruction: {system_prompt}\n\n{user_message}"

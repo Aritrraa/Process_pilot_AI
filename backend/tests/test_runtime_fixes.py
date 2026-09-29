@@ -327,13 +327,12 @@ class TestEmbeddingAndRAG:
         finally:
             settings.ENVIRONMENT = original_env
 
-    def test_gemini_embedding_uses_embedding_001(self):
-        """Gemini embedding must use models/embedding-001, which is supported by v0.4.1."""
+    def test_gemini_embedding_uses_text_embedding_004(self):
+        """Gemini embedding must use models/text-embedding-004, supported by >=0.5.2."""
         import inspect
         from app.vectorstore import EmbeddingProvider
         source = inspect.getsource(EmbeddingProvider.get_embedding)
-        assert "models/embedding-001" in source
-        assert "gemini-1.5-flash" not in source
+        assert "models/text-embedding-004" in source
 
     def test_openai_embedding_uses_text_embedding_3_small(self):
         """OpenAI embedding must use text-embedding-3-small."""
@@ -384,7 +383,7 @@ class TestGeminiSDKCompat:
     def test_gemini_sdk_version(self):
         import google.generativeai as genai
         assert hasattr(genai, '__version__')
-        assert genai.__version__ == "0.4.1"
+        assert genai.__version__ == "0.8.3"
 
     def test_no_system_instruction_in_gemini_code(self):
         """system_instruction must NOT be passed to GenerativeModel (unsupported in 0.4.1)."""
@@ -396,11 +395,11 @@ class TestGeminiSDKCompat:
         assert "system_instruction" not in stream_source
 
     def test_gemini_model_name_valid(self):
-        """Code must use gemini-pro which is fully supported by SDK 0.4.1."""
+        """Code must use gemini-1.5-flash which is fully supported by SDK >=0.5.2."""
         import inspect
         from app.llm_client import LLMClient
         source = inspect.getsource(LLMClient._call_gemini)
-        assert "gemini-pro" in source
+        assert "gemini-1.5-flash" in source
 
     def test_generate_content_async_supports_stream(self):
         """Installed SDK must support stream= parameter."""

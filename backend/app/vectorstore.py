@@ -66,7 +66,7 @@ class EmbeddingProvider:
                 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
                 def _call_gemini():
                     response = genai.embed_content(
-                        model="models/embedding-001",
+                        model="models/text-embedding-004",
                         content=text,
                         task_type="retrieval_document"
                     )
