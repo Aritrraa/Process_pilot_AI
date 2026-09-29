@@ -77,7 +77,8 @@ class EmbeddingProvider:
                 if settings.ENVIRONMENT == "production":
                     # Propagate real error rather than silently failing to mock embeddings
                     raise RuntimeError(f"Gemini API Error: {e!s}") from e
-                return self._local_mock_embedding(text)
+        elif self.llm_provider == "groq":
+            raise ValueError("Groq does not support embeddings. Please configure an OpenAI or Gemini API key in Settings for document search.")
         else:
             return self._local_mock_embedding(text)
 
