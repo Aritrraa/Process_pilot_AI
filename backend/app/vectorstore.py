@@ -67,7 +67,18 @@ class EmbeddingProvider:
                     kwargs = {"model": model_name, "content": text}
                     if "embedding-001" in model_name:
                         kwargs["task_type"] = "retrieval_document"
-                    response = genai.embed_content(**kwargs)
+                    
+                    try:
+                        kwargs["output_dimensionality"] = 768
+                        response = genai.embed_content(**kwargs)
+                    except Exception as e:
+                        # Some older models might reject output_dimensionality parameter
+                        if "output_dimensionality" in str(e).lower() or "unexpected keyword argument" in str(e).lower():
+                            kwargs.pop("output_dimensionality", None)
+                            response = genai.embed_content(**kwargs)
+                        else:
+                            raise e
+                            
                     return response['embedding']
 
                 try:
