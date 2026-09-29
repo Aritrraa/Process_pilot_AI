@@ -14,12 +14,8 @@ is_sqlite = db_url.startswith("sqlite")
 connect_args = {"check_same_thread": False} if is_sqlite else {}
 
 # Fix for Supabase Transaction Pooler (port 6543) crashing asyncpg
-engine_kwargs = {}
 if not is_sqlite:
-    # asyncpg internal cache
-    connect_args["statement_cache_size"] = 0
-    # sqlalchemy asyncpg dialect cache
-    engine_kwargs["prepared_statement_cache_size"] = 0
+    connect_args["prepared_statement_cache_size"] = 0
 
 # For SQLite async we would need aiosqlite, but assuming production is Postgres
 if is_sqlite:
@@ -27,7 +23,7 @@ if is_sqlite:
     db_url = db_url.replace("sqlite://", "sqlite+aiosqlite://")
 
 engine = create_async_engine(
-    db_url, connect_args=connect_args, **engine_kwargs
+    db_url, connect_args=connect_args
 )
 
 SessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine, class_=AsyncSession, expire_on_commit=False)
